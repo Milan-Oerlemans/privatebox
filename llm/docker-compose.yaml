@@ -1,0 +1,29 @@
+version: "3.9"
+
+services:
+  ollama:
+    image: ollama/ollama
+    container_name: qwen3-ollama
+    ports:
+      - "9000:11434"              # host:container
+    volumes:
+      - ollama:/root/.ollama      # persistent model/cache storage
+      - ./start-ollama.sh:/start-ollama.sh:ro
+    environment:
+
+      # Optional: keep models warm in VRAM
+      - OLLAMA_KEEP_ALIVE=1h
+      - OLLAMA_DEBUG=1
+    entrypoint: ["/bin/sh", "/start-ollama.sh"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: ${OLLAMA_GPU_DRIVER-nvidia}
+              count: ${OLLAMA_GPU_COUNT-1}
+              capabilities:
+                - gpu
+    restart: unless-stopped
+
+volumes:
+  ollama:
