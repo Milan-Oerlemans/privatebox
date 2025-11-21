@@ -237,7 +237,7 @@ services:
     volumes:
       - ../data/nginx:/etc/nginx/conf.d
       - ../data/certbot/conf:/etc/letsencrypt
-      - ../data/certbot/www:/var/www/certbot
+      # - ../data/certbot/www:/var/www/certbot
     # sleep a little bit to allow the web_server / api_server to start up.
     # Without this we've seen issues where nginx shows no error logs but
     # does not recieve any traffic

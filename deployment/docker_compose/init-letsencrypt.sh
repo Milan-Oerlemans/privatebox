@@ -102,8 +102,9 @@ esac
 # Enable staging mode if needed
 if [ $staging != "0" ]; then staging_arg="--staging"; fi
 
-$COMPOSE_CMD -f docker-compose.prod.yml run --name onyx --rm --entrypoint "\
-  certbot certonly --webroot -w /var/www/certbot \
+# NOTE: Added -it flag here to allow interactive manual DNS input
+$COMPOSE_CMD -f docker-compose.prod.yml run -it --name onyx --rm --entrypoint "\
+  certbot certonly --manual --preferred-challenges dns \
     $staging_arg \
     $email_arg \
     $domain_args \
