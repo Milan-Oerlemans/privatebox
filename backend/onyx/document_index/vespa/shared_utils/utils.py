@@ -1,4 +1,3 @@
-import re
 import time
 from typing import cast
 
@@ -53,21 +52,11 @@ def replace_invalid_doc_id_characters(text: str) -> str:
     return text.replace("'", "_")
 
 
-def remove_invalid_unicode_chars(text: str) -> str:
-    """Vespa does not take in unicode chars that aren't valid for XML.
-    This removes them."""
-    _illegal_xml_chars_RE: re.Pattern = re.compile(
-        "[\x00-\x08\x0b\x0c\x0e-\x1f\ud800-\udfff\ufdd0-\ufdef\ufffe\uffff]"
-    )
-    return _illegal_xml_chars_RE.sub("", text)
-
-
 def get_vespa_http_client(no_timeout: bool = False, http2: bool = True) -> httpx.Client:
     """
-    Configure and return an HTTP client for communicating with Vespa,
+    Configures and returns an HTTP client for communicating with Vespa,
     including authentication if needed.
     """
-
     return httpx.Client(
         cert=(
             cast(tuple[str, str], (VESPA_CLOUD_CERT_PATH, VESPA_CLOUD_KEY_PATH))

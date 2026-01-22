@@ -74,16 +74,16 @@ import React, {
   useEffect,
   useMemo,
   useId,
+  useRef,
 } from "react";
 import { cn } from "@/lib/utils";
 import InputTypeIn from "./InputTypeIn";
-import SvgMinusCircle from "@/icons/minus-circle";
-import SvgXOctagon from "@/icons/x-octagon";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Button from "@/refresh-components/buttons/Button";
-import SvgPlusCircle from "@/icons/plus-circle";
 import Text from "@/refresh-components/texts/Text";
 import { FieldContext } from "../form/FieldContext";
+import { FieldMessage } from "../messages/FieldMessage";
+import { SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
 
 export type KeyValue = { key: string; value: string };
 
@@ -136,24 +136,19 @@ const KeyValueInputItem = ({
             aria-describedby={
               error?.key ? `${fieldId}-key-error-${index}` : undefined
             }
-            disabled={disabled}
+            variant={disabled ? "disabled" : undefined}
             showClearButton={false}
           />
           {error?.key && (
-            <div className="flex flex-row items-center gap-x-0.5 ml-0.5">
-              <div className="w-4 h-4 flex items-center justify-center">
-                <SvgXOctagon className="h-3 w-3 stroke-status-error-05" />
-              </div>
-              <Text
+            <FieldMessage variant="error" className="ml-0.5">
+              <FieldMessage.Content
                 id={`${fieldId}-key-error-${index}`}
-                text03
-                secondaryBody
-                className="ml-0.5"
                 role="alert"
+                className="ml-0.5"
               >
                 {error.key}
-              </Text>
-            </div>
+              </FieldMessage.Content>
+            </FieldMessage>
           )}
         </div>
         <div className={cn(valueClassName, "flex flex-col gap-y-0.5")}>
@@ -166,24 +161,19 @@ const KeyValueInputItem = ({
             aria-describedby={
               error?.value ? `${fieldId}-value-error-${index}` : undefined
             }
-            disabled={disabled}
+            variant={disabled ? "disabled" : undefined}
             showClearButton={false}
           />
           {error?.value && (
-            <div className="flex flex-row items-center gap-x-0.5 ml-0.5">
-              <div className="w-4 h-4 flex items-center justify-center">
-                <SvgXOctagon className="h-3 w-3 stroke-status-error-05" />
-              </div>
-              <Text
+            <FieldMessage variant="error" className="ml-0.5">
+              <FieldMessage.Content
                 id={`${fieldId}-value-error-${index}`}
-                text03
-                secondaryBody
-                className="ml-0.5"
                 role="alert"
+                className="ml-0.5"
               >
                 {error.value}
-              </Text>
-            </div>
+              </FieldMessage.Content>
+            </FieldMessage>
           )}
         </div>
       </div>
@@ -246,6 +236,8 @@ export interface KeyValueInputProps
   validateEmptyKeys?: boolean;
   /** Optional name for the field (for accessibility) */
   name?: string;
+  /** Custom label for the add button (defaults to "Add Line") */
+  addButtonLabel?: string;
 }
 
 const KeyValueInput = ({
@@ -265,6 +257,7 @@ const KeyValueInput = ({
   validateDuplicateKeys = true,
   validateEmptyKeys = true,
   name,
+  addButtonLabel = "Add Line",
   className,
   ...rest
 }: KeyValueInputProps) => {
@@ -377,14 +370,25 @@ const KeyValueInput = ({
   }, [hasAnyError, errors]);
 
   // Notify parent of validation changes
+  const onValidationChangeRef = useRef(onValidationChange);
+  const onValidationErrorRef = useRef(onValidationError);
+
   useEffect(() => {
-    onValidationChange?.(isValid, errors);
-  }, [isValid, errors, onValidationChange]);
+    onValidationChangeRef.current = onValidationChange;
+  }, [onValidationChange]);
+
+  useEffect(() => {
+    onValidationErrorRef.current = onValidationError;
+  }, [onValidationError]);
+
+  useEffect(() => {
+    onValidationChangeRef.current?.(isValid, errors);
+  }, [isValid, errors]);
 
   // Notify parent of error state for form library integration
   useEffect(() => {
-    onValidationError?.(errorMessage);
-  }, [errorMessage, onValidationError]);
+    onValidationErrorRef.current?.(errorMessage);
+  }, [errorMessage]);
 
   const canRemoveItems = mode === "line" || items.length > 1;
 
@@ -442,10 +446,10 @@ const KeyValueInput = ({
     >
       <div id={`${fieldId}-header`} className="flex gap-1 items-center w-full">
         <div className="flex gap-2 flex-1">
-          <Text text04 mainUiAction className={headerKeyClassName}>
+          <Text as="p" text04 mainUiAction className={headerKeyClassName}>
             {keyTitle}
           </Text>
-          <Text text04 mainUiAction className={headerValueClassName}>
+          <Text as="p" text04 mainUiAction className={headerValueClassName}>
             {valueTitle}
           </Text>
         </div>
@@ -477,7 +481,7 @@ const KeyValueInput = ({
           ))}
         </div>
       ) : (
-        <Text text03 secondaryBody className="ml-0.5">
+        <Text as="p" text03 secondaryBody className="ml-0.5">
           No items added yet.
         </Text>
       )}
@@ -491,7 +495,7 @@ const KeyValueInput = ({
           aria-label={`Add ${keyTitle} and ${valueTitle} pair`}
           type="button"
         >
-          Add Line
+          {addButtonLabel}
         </Button>
       </div>
     </div>

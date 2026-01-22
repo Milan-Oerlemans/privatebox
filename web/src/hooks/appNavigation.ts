@@ -1,5 +1,8 @@
+"use client";
+
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import { useRouter, useSearchParams } from "next/navigation";
+import type { Route } from "next";
 import { useCallback } from "react";
 
 interface UseAppRouterProps {
@@ -32,7 +35,7 @@ export function useAppRouter() {
       const finalString = finalParams.join("&");
       const finalUrl = `/chat?${finalString}`;
 
-      router.push(finalUrl);
+      router.push(finalUrl as Route);
     },
     [router]
   );

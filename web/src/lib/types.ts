@@ -29,6 +29,7 @@ interface UserPreferences {
   shortcut_enabled: boolean;
   temperature_override_enabled: boolean;
   theme_preference: ThemePreference | null;
+  chat_background: string | null;
 }
 
 export interface UserPersonalization {
@@ -464,6 +465,7 @@ export enum ValidSources {
   Jira = "jira",
   Productboard = "productboard",
   Slab = "slab",
+  Coda = "coda",
   Notion = "notion",
   Guru = "guru",
   Gong = "gong",
@@ -500,8 +502,10 @@ export enum ValidSources {
   Airtable = "airtable",
   Gitbook = "gitbook",
   Highspot = "highspot",
+  DrupalWiki = "drupal_wiki",
   Imap = "imap",
   Bitbucket = "bitbucket",
+  TestRail = "testrail",
 
   // Federated Connectors
   FederatedSlack = "federated_slack",
@@ -525,6 +529,7 @@ export const validAutoSyncSources = [
   ValidSources.Salesforce,
   ValidSources.GitHub,
   ValidSources.Sharepoint,
+  ValidSources.Teams,
 ] as const;
 
 // Create a type from the array elements

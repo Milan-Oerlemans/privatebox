@@ -1,4 +1,4 @@
-import { Separator } from "@/components/ui/separator";
+import Separator from "@/refresh-components/Separator";
 import {
   Table,
   TableHead,
@@ -7,37 +7,29 @@ import {
   TableCell,
   TableHeader,
 } from "@/components/ui/table";
-import Text from "@/components/ui/text";
-
-import { FiDownload } from "react-icons/fi";
-import {
-  Select,
-  SelectItem,
-  SelectValue,
-  SelectTrigger,
-  SelectContent,
-} from "@/components/ui/select";
+import Text from "@/refresh-components/texts/Text";
+import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { ThreeDotsLoader } from "@/components/Loading";
-import { ChatSessionMinimal } from "../usage/types";
+import { ChatSessionMinimal } from "@/app/ee/admin/performance/usage/types";
 import { timestampToReadableDate } from "@/lib/dateUtils";
-import { FiFrown, FiMinus, FiSmile, FiMeh } from "react-icons/fi";
 import { Dispatch, SetStateAction, useCallback, useState } from "react";
 import { Feedback, TaskStatus } from "@/lib/types";
 import {
   DateRange,
   AdminDateRangeSelector,
-} from "../../../../../components/dateRangeSelectors/AdminDateRangeSelector";
+} from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { PageSelector } from "@/components/PageSelector";
 import Link from "next/link";
-import { FeedbackBadge } from "./FeedbackBadge";
-import KickoffCSVExport from "./KickoffCSVExport";
+import type { Route } from "next";
+import { FeedbackBadge } from "@/app/ee/admin/performance/query-history/FeedbackBadge";
+import KickoffCSVExport from "@/app/ee/admin/performance/query-history/KickoffCSVExport";
 import CardSection from "@/components/admin/CardSection";
 import usePaginatedFetch from "@/hooks/usePaginatedFetch";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR from "swr";
-import { TaskQueueState } from "./types";
-import { withRequestId } from "./utils";
+import { TaskQueueState } from "@/app/ee/admin/performance/query-history/types";
+import { withRequestId } from "@/app/ee/admin/performance/query-history/utils";
 import {
   DOWNLOAD_QUERY_HISTORY_URL,
   LIST_QUERY_HISTORY_URL,
@@ -45,12 +37,19 @@ import {
   ITEMS_PER_PAGE,
   PAGES_PER_BATCH,
   PREVIOUS_CSV_TASK_BUTTON_NAME,
-} from "./constants";
+} from "@/app/ee/admin/performance/query-history/constants";
 import { humanReadableFormatWithTime } from "@/lib/time";
-import { Modal } from "@/components/Modal";
+import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import { Badge } from "@/components/ui/badge";
-
+import {
+  SvgDownloadCloud,
+  SvgFileText,
+  SvgMinus,
+  SvgMinusCircle,
+  SvgThumbsDown,
+  SvgThumbsUp,
+} from "@opal/icons";
 function QueryHistoryTableRow({
   chatSessionMinimal,
 }: {
@@ -84,8 +83,10 @@ function QueryHistoryTableRow({
       {/* Wrapping in <td> to avoid console warnings */}
       <td className="w-0 p-0">
         <Link
-          href={`/admin/performance/query-history/${chatSessionMinimal.id}`}
-          className="absolute w-full h-full left-0"
+          href={
+            `/ee/admin/performance/query-history/${chatSessionMinimal.id}` as Route
+          }
+          className="absolute w-full h-full left-0 top-0"
         ></Link>
       </td>
     </TableRow>
@@ -101,42 +102,31 @@ function SelectFeedbackType({
 }) {
   return (
     <div>
-      <Text className="my-auto mr-2 font-medium mb-1">Feedback Type</Text>
+      <Text as="p" className="my-auto mr-2 font-medium mb-1">
+        Feedback Type
+      </Text>
       <div className="max-w-sm space-y-6">
-        <Select
+        <InputSelect
           value={value}
           onValueChange={onValueChange as (value: string) => void}
         >
-          <SelectTrigger>
-            <SelectValue placeholder="Select feedback type" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">
-              <div className="flex items-center gap-2">
-                <FiMinus className="h-4 w-4" />
-                <span>Any</span>
-              </div>
-            </SelectItem>
-            <SelectItem value="like">
-              <div className="flex items-center gap-2">
-                <FiSmile className="h-4 w-4" />
-                <span>Like</span>
-              </div>
-            </SelectItem>
-            <SelectItem value="dislike">
-              <div className="flex items-center gap-2">
-                <FiFrown className="h-4 w-4" />
-                <span>Dislike</span>
-              </div>
-            </SelectItem>
-            <SelectItem value="mixed">
-              <div className="flex items-center gap-2">
-                <FiMeh className="h-4 w-4" />
-                <span>Mixed</span>
-              </div>
-            </SelectItem>
-          </SelectContent>
-        </Select>
+          <InputSelect.Trigger />
+
+          <InputSelect.Content>
+            <InputSelect.Item value="all" icon={SvgMinusCircle}>
+              Any
+            </InputSelect.Item>
+            <InputSelect.Item value="like" icon={SvgThumbsUp}>
+              Like
+            </InputSelect.Item>
+            <InputSelect.Item value="dislike" icon={SvgThumbsDown}>
+              Dislike
+            </InputSelect.Item>
+            <InputSelect.Item value="mixed" icon={SvgMinus}>
+              Mixed
+            </InputSelect.Item>
+          </InputSelect.Content>
+        </InputSelect>
       </div>
     </div>
   );
@@ -187,65 +177,70 @@ function PreviousQueryHistoryExportsModal({
   );
 
   return (
-    <Modal
-      title="Previous Query History Exports"
-      onOutsideClick={() => setShowModal(false)}
-      className="overflow-y-scroll h-1/2"
-    >
-      <div className="flex flex-col h-full w-full py-4">
-        <div className="flex flex-1">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Generated At</TableHead>
-                <TableHead>Start Range</TableHead>
-                <TableHead>End Range</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Download</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {paginatedTasks.map((task, index) => (
-                <TableRow key={index}>
-                  <TableCell>
-                    {humanReadableFormatWithTime(task.startTime)}
-                  </TableCell>
-                  <TableCell>{task.start.toDateString()}</TableCell>
-                  <TableCell>{task.end.toDateString()}</TableCell>
-                  <TableCell>
-                    <ExportBadge status={task.status} />
-                  </TableCell>
-                  <TableCell>
-                    {task.status === "SUCCESS" ? (
-                      <Link
-                        className="flex justify-center"
-                        href={withRequestId(
-                          DOWNLOAD_QUERY_HISTORY_URL,
-                          task.taskId
+    <Modal open onOpenChange={() => setShowModal(false)}>
+      <Modal.Content width="lg" height="full">
+        <Modal.Header
+          icon={SvgFileText}
+          title="Previous Query History Exports"
+          onClose={() => setShowModal(false)}
+        />
+        <Modal.Body>
+          <div className="flex flex-col w-full">
+            <div className="flex flex-1">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Generated At</TableHead>
+                    <TableHead>Start Range</TableHead>
+                    <TableHead>End Range</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Download</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paginatedTasks.map((task, index) => (
+                    <TableRow key={index}>
+                      <TableCell>
+                        {humanReadableFormatWithTime(task.startTime)}
+                      </TableCell>
+                      <TableCell>{task.start.toDateString()}</TableCell>
+                      <TableCell>{task.end.toDateString()}</TableCell>
+                      <TableCell>
+                        <ExportBadge status={task.status} />
+                      </TableCell>
+                      <TableCell>
+                        {task.status === "SUCCESS" ? (
+                          <a
+                            className="flex justify-center"
+                            href={withRequestId(
+                              DOWNLOAD_QUERY_HISTORY_URL,
+                              task.taskId
+                            )}
+                          >
+                            <SvgDownloadCloud className="h-4 w-4 text-action-link-05" />
+                          </a>
+                        ) : (
+                          <SvgDownloadCloud className="h-4 w-4 text-action-link-05 opacity-20" />
                         )}
-                      >
-                        <FiDownload color="primary" />
-                      </Link>
-                    ) : (
-                      <FiDownload color="primary" className="opacity-20" />
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
 
-        <div className="flex mt-3">
-          <div className="mx-auto">
-            <PageSelector
-              currentPage={taskPage}
-              totalPages={totalTaskPages}
-              onPageChange={setTaskPage}
-            />
+            <div className="flex mt-3">
+              <div className="mx-auto">
+                <PageSelector
+                  currentPage={taskPage}
+                  totalPages={totalTaskPages}
+                  onPageChange={setTaskPage}
+                />
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        </Modal.Body>
+      </Modal.Content>
     </Modal>
   );
 }

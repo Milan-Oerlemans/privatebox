@@ -1,29 +1,19 @@
 from collections.abc import Sequence
 from datetime import datetime
+from enum import Enum
 from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel
-from pydantic import ConfigDict
 from pydantic import Field
 from pydantic import field_validator
 
-from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.constants import DocumentSource
-from onyx.context.search.enums import LLMEvaluationType
-from onyx.context.search.enums import OptionalSearchSetting
-from onyx.context.search.enums import SearchType
-from onyx.db.models import Persona
 from onyx.db.models import SearchSettings
 from onyx.indexing.models import BaseChunk
 from onyx.indexing.models import IndexingSetting
+from onyx.tools.tool_implementations.web_search.models import WEB_SEARCH_PREFIX
 from shared_configs.enums import RerankerProvider
-from shared_configs.model_server_models import Embedding
-
-
-MAX_METRICS_CONTENT = (
-    200  # Just need enough characters to identify where in the doc the chunk is
-)
 
 
 class QueryExpansions(BaseModel):
@@ -31,6 +21,12 @@ class QueryExpansions(BaseModel):
     semantic_expansions: list[str] | None = None
 
 
+class QueryExpansionType(Enum):
+    KEYWORD = "keyword"
+    SEMANTIC = "semantic"
+
+
+# TODO clean up this stuff, reranking is no longer used
 class RerankingDetails(BaseModel):
     # If model is None (or num_rerank is 0), then reranking is turned off
     rerank_model_name: str | None
@@ -112,11 +108,6 @@ class BaseFilters(BaseModel):
     document_set: list[str] | None = None
     time_cutoff: datetime | None = None
     tags: list[Tag] | None = None
-    kg_entities: list[str] | None = None
-    kg_relationships: list[str] | None = None
-    kg_terms: list[str] | None = None
-    kg_sources: list[str] | None = None
-    kg_chunk_id_zero_only: bool | None = False
 
 
 class UserFileFilters(BaseModel):
@@ -127,13 +118,6 @@ class UserFileFilters(BaseModel):
 class IndexFilters(BaseFilters, UserFileFilters):
     access_control_list: list[str] | None
     tenant_id: str | None = None
-
-
-class ChunkMetric(BaseModel):
-    document_id: str
-    chunk_content_start: str
-    first_link: str | None
-    score: float
 
 
 class ChunkContext(BaseModel):
@@ -151,83 +135,41 @@ class ChunkContext(BaseModel):
         return value
 
 
-class SearchRequest(ChunkContext):
+class BasicChunkRequest(BaseModel):
     query: str
 
-    expanded_queries: QueryExpansions | None = None
-    original_query: str | None = None
-
-    search_type: SearchType = SearchType.SEMANTIC
-
-    human_selected_filters: BaseFilters | None = None
-    user_file_filters: UserFileFilters | None = None
-    enable_auto_detect_filters: bool | None = None
-    persona: Persona | None = None
-
-    # if None, no offset / limit
-    offset: int | None = None
-    limit: int | None = None
-
-    multilingual_expansion: list[str] | None = None
-    recency_bias_multiplier: float = 1.0
+    # In case the caller wants to override the weighting between semantic and keyword search.
     hybrid_alpha: float | None = None
-    rerank_settings: RerankingDetails | None = None
-    evaluation_type: LLMEvaluationType = LLMEvaluationType.UNSPECIFIED
-    model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    precomputed_query_embedding: Embedding | None = None
-    precomputed_is_keyword: bool | None = None
-    precomputed_keywords: list[str] | None = None
+    # In case some queries favor recency more than other queries.
+    recency_bias_multiplier: float = 1.0
+
+    limit: int | None = None
+    offset: int | None = None  # This one is not set currently
 
 
-class SearchQuery(ChunkContext):
-    "Processed Request that is directly passed to the SearchPipeline"
+class ChunkSearchRequest(BasicChunkRequest):
+    # Final filters are calculated from these
+    user_selected_filters: BaseFilters | None = None
 
-    query: str
-    processed_keywords: list[str]
-    search_type: SearchType
-    evaluation_type: LLMEvaluationType
+    # Use with caution!
+    bypass_acl: bool = False
+
+
+# From the Chat Session we know what project (if any) this search should include
+# From the user uploads and persona uploaded files, we know which of those to include
+class ChunkIndexRequest(BasicChunkRequest):
+    # Calculated final filters
     filters: IndexFilters
 
-    # by this point, the chunks_above and chunks_below must be set
-    chunks_above: int
-    chunks_below: int
-
-    rerank_settings: RerankingDetails | None
-    hybrid_alpha: float
-    recency_bias_multiplier: float
-
-    # Only used if LLM evaluation type is not skip, None to use default settings
-    max_llm_filter_sections: int
-
-    num_hits: int = NUM_RETURNED_HITS
-    offset: int = 0
-    model_config = ConfigDict(frozen=True)
-
-    precomputed_query_embedding: Embedding | None = None
-
-    expanded_queries: QueryExpansions | None = None
-    original_query: str | None
+    query_keywords: list[str] | None = None
 
 
-class RetrievalDetails(ChunkContext):
-    # Use LLM to determine whether to do a retrieval or only rely on existing history
-    # If the Persona is configured to not run search (0 chunks), this is bypassed
-    # If no Prompt is configured, the only search results are shown, this is bypassed
-    run_search: OptionalSearchSetting = OptionalSearchSetting.ALWAYS
-    # Is this a real-time/streaming call or a question where Onyx can take more time?
-    # Used to determine reranking flow
-    real_time: bool = True
-    # The following have defaults in the Persona settings which can be overridden via
-    # the query, if None, then use Persona settings
-    filters: BaseFilters | None = None
-    enable_auto_detect_filters: bool | None = None
-    # if None, no offset / limit
-    offset: int | None = None
-    limit: int | None = None
-
-    # If this is set, only the highest matching chunk (or merged chunks) is returned
-    dedupe_docs: bool = False
+class ContextExpansionType(str, Enum):
+    NOT_RELEVANT = "not_relevant"
+    MAIN_SECTION_ONLY = "main_section_only"
+    INCLUDE_ADJACENT_SECTIONS = "include_adjacent_sections"
+    FULL_DOCUMENT = "full_document"
 
 
 class InferenceChunk(BaseChunk):
@@ -236,11 +178,12 @@ class InferenceChunk(BaseChunk):
     semantic_identifier: str
     title: str | None  # Separate from Semantic Identifier though often same
     boost: int
-    recency_bias: float
     score: float | None
     hidden: bool
     is_relevant: bool | None = None
     relevance_explanation: str | None = None
+    # TODO(andrei): Ideally we could improve this to where each value is just a
+    # list of strings.
     metadata: dict[str, str | list[str]]
     # Matched sections in the chunk. Uses Vespa syntax e.g. <hi>TEXT</hi>
     # to specify that a set of words should be highlighted. For example:
@@ -394,6 +337,24 @@ class SearchDoc(BaseModel):
 
         return search_docs
 
+    # TODO - there is likely a way to clean this all up and not have the switch between these
+    @classmethod
+    def from_saved_search_doc(cls, saved_search_doc: "SavedSearchDoc") -> "SearchDoc":
+        """Convert a SavedSearchDoc to SearchDoc by dropping the db_doc_id field."""
+        saved_search_doc_data = saved_search_doc.model_dump()
+        # Remove db_doc_id as it's not part of SearchDoc
+        saved_search_doc_data.pop("db_doc_id", None)
+        return cls(**saved_search_doc_data)
+
+    @classmethod
+    def from_saved_search_docs(
+        cls, saved_search_docs: list["SavedSearchDoc"]
+    ) -> list["SearchDoc"]:
+        return [
+            cls.from_saved_search_doc(saved_search_doc)
+            for saved_search_doc in saved_search_docs
+        ]
+
     def model_dump(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
         initial_dict = super().model_dump(*args, **kwargs)  # type: ignore
         initial_dict["updated_at"] = (
@@ -402,9 +363,17 @@ class SearchDoc(BaseModel):
         return initial_dict
 
 
+class SearchDocsResponse(BaseModel):
+    search_docs: list[SearchDoc]
+    # Maps the citation number to the document id
+    # Since these are no longer just links on the frontend but instead document cards, mapping it to the
+    # document id is  the most staightforward way.
+    citation_mapping: dict[int, str]
+
+
 class SavedSearchDoc(SearchDoc):
     db_doc_id: int
-    score: float = 0.0
+    score: float | None = 0.0
 
     @classmethod
     def from_search_doc(
@@ -432,7 +401,7 @@ class SavedSearchDoc(SearchDoc):
         return cls(
             # db_doc_id can be a filler value since these docs are not saved to the database.
             db_doc_id=0,
-            document_id="INTERNET_SEARCH_DOC_" + url,
+            document_id=WEB_SEARCH_PREFIX + url,
             chunk_ind=0,
             semantic_identifier=url,
             link=url,
@@ -454,7 +423,14 @@ class SavedSearchDoc(SearchDoc):
     def __lt__(self, other: Any) -> bool:
         if not isinstance(other, SavedSearchDoc):
             return NotImplemented
-        return self.score < other.score
+        self_score = self.score if self.score is not None else 0.0
+        other_score = other.score if other.score is not None else 0.0
+        return self_score < other_score
+
+
+class CitationDocInfo(BaseModel):
+    search_doc: SearchDoc
+    citation_number: int | None
 
 
 class SavedSearchDocWithContent(SavedSearchDoc):
@@ -462,23 +438,3 @@ class SavedSearchDocWithContent(SavedSearchDoc):
     section in addition to the match_highlights."""
 
     content: str
-
-
-class RetrievalDocs(BaseModel):
-    top_documents: list[SavedSearchDoc]
-
-
-class SearchResponse(RetrievalDocs):
-    llm_indices: list[int]
-
-
-class RetrievalMetricsContainer(BaseModel):
-    search_type: SearchType
-    metrics: list[ChunkMetric]  # This contains the scores for retrieval as well
-
-
-class RerankMetricsContainer(BaseModel):
-    """The score held by this is the un-boosted, averaged score of the ensemble cross-encoders"""
-
-    metrics: list[ChunkMetric]
-    raw_similarity_scores: list[float]

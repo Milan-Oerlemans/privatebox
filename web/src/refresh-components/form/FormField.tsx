@@ -1,3 +1,5 @@
+"use client";
+
 import { cn } from "@/lib/utils";
 import { FieldContext } from "./FieldContext";
 import {
@@ -13,43 +15,7 @@ import React, { useId, useMemo } from "react";
 import { useFieldContext } from "./FieldContext";
 import { Slot } from "@radix-ui/react-slot";
 import Text from "../texts/Text";
-import SvgCheckCircle from "@/icons/check-circle";
-
-import SvgXOctagon from "@/icons/x-octagon";
-import SvgLoader from "@/icons/loader";
-
-const iconMap = {
-  error: <SvgXOctagon className="h-3 w-3 stroke-status-error-05" />,
-  success: <SvgCheckCircle className="h-3 w-3 stroke-status-success-05" />,
-  idle: null,
-  loading: <SvgLoader className="h-3 w-3 stroke-text-02 animate-spin" />,
-};
-
-const FieldMessageContent: React.FC<{
-  baseId: string;
-  state: "idle" | "error" | "success" | "loading";
-  content: React.ReactNode;
-  className?: string;
-  idSuffix?: string;
-}> = ({ baseId, state, content, className, idSuffix = "msg" }) => {
-  return (
-    <div className="flex flex-row items-center gap-x-0.5">
-      {state !== "idle" && (
-        <div className="w-4 h-4 flex items-center justify-center">
-          {iconMap[state]}
-        </div>
-      )}
-      <Text
-        id={`${baseId}-${idSuffix}`}
-        text03
-        secondaryBody
-        className={cn("ml-0.5", className)}
-      >
-        {content}
-      </Text>
-    </div>
-  );
-};
+import { FieldMessage } from "../messages/FieldMessage";
 
 export const FormFieldRoot: React.FC<FormFieldRootProps> = ({
   id,
@@ -92,6 +58,8 @@ export const FormFieldLabel: React.FC<LabelProps> = ({
   leftIcon,
   rightIcon,
   optional,
+  required,
+  rightAction,
   className,
   children,
   ...props
@@ -102,17 +70,26 @@ export const FormFieldLabel: React.FC<LabelProps> = ({
       id={`${baseId}-label`}
       htmlFor={`${baseId}-control`}
       className={cn(
-        "ml-0.5 text-text-04 font-main-ui-action flex flex-row",
+        "ml-0.5 text-text-04 font-main-ui-action flex flex-row items-center gap-1",
         className
       )}
       {...props}
     >
+      {leftIcon && <span className="flex items-center">{leftIcon}</span>}
       {children}
-      {optional ? (
-        <Text text03 mainUiMuted className="mx-0.5">
+      {required ? (
+        <Text as="p" text03 mainUiMuted className="mx-0.5">
+          {"(Required)"}
+        </Text>
+      ) : optional ? (
+        <Text as="p" text03 mainUiMuted className="mx-0.5">
           {"(Optional)"}
         </Text>
       ) : null}
+      {rightIcon && <span className="flex items-center">{rightIcon}</span>}
+      {rightAction && (
+        <span className="ml-auto flex items-center">{rightAction}</span>
+      )}
     </label>
   );
 };
@@ -154,6 +131,7 @@ export const FormFieldDescription: React.FC<DescriptionProps> = ({
   if (!content) return null;
   return (
     <Text
+      as="p"
       id={`${baseId}-desc`}
       text03
       secondaryBody
@@ -179,12 +157,11 @@ export const FormFieldMessage: React.FC<MessageProps> = ({
     content = messages?.idle;
   }
   return content ? (
-    <FieldMessageContent
-      baseId={baseId}
-      state={tempState}
-      content={content}
-      className={className}
-    />
+    <FieldMessage variant={tempState} className={className}>
+      <FieldMessage.Content id={`${baseId}-msg`}>
+        {content}
+      </FieldMessage.Content>
+    </FieldMessage>
   ) : null;
 };
 
@@ -196,13 +173,11 @@ export const FormAPIFieldMessage: React.FC<APIMessageProps> = ({
   const { baseId } = useFieldContext();
   const content = messages?.[state];
   return content ? (
-    <FieldMessageContent
-      baseId={baseId}
-      state={state}
-      content={content}
-      className={className}
-      idSuffix="api-msg"
-    />
+    <FieldMessage variant={state} className={className}>
+      <FieldMessage.Content id={`${baseId}-api-msg`}>
+        {content}
+      </FieldMessage.Content>
+    </FieldMessage>
   ) : null;
 };
 

@@ -13,7 +13,7 @@ import {
 } from "@/app/chat/message/MemoizedTextComponents";
 import { extractCodeText, preprocessLaTeX } from "@/app/chat/message/codeUtils";
 import { CodeBlock } from "@/app/chat/message/CodeBlock";
-import { transformLinkUri } from "@/lib/utils";
+import { transformLinkUri, cn } from "@/lib/utils";
 
 /**
  * Processes content for markdown rendering by handling code blocks and LaTeX
@@ -63,12 +63,18 @@ export const useMarkdownComponents = (
         updatePresentingDocument={state?.setPresentingDocument || (() => {})}
         docs={state?.docs || []}
         userFiles={state?.userFiles || []}
+        citations={state?.citations}
         href={props.href}
       >
         {props.children}
       </MemoizedAnchor>
     ),
-    [state?.docs, state?.userFiles, state?.setPresentingDocument]
+    [
+      state?.docs,
+      state?.userFiles,
+      state?.citations,
+      state?.setPresentingDocument,
+    ]
   );
 
   const markdownComponents = useMemo(
@@ -103,6 +109,15 @@ export const useMarkdownComponents = (
           </li>
         );
       },
+      table: ({ node, className, children, ...props }: any) => {
+        return (
+          <div className="markdown-table-breakout">
+            <table className={cn(className, "min-w-full")} {...props}>
+              {children}
+            </table>
+          </div>
+        );
+      },
       code: ({ node, className, children }: any) => {
         const codeText = extractCodeText(node, processedContent, children);
 
@@ -134,7 +149,7 @@ export const renderMarkdown = (
         components={markdownComponents}
         remarkPlugins={[
           remarkGfm,
-          [remarkMath, { singleDollarTextMath: false }],
+          [remarkMath, { singleDollarTextMath: true }],
         ]}
         rehypePlugins={[rehypeHighlight, rehypeKatex]}
         urlTransform={transformLinkUri}

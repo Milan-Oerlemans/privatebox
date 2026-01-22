@@ -1,5 +1,6 @@
 import { Page } from "@playwright/test";
 import { expect } from "@chromatic-com/playwright";
+import { verifyAssistantIsChosen } from "./chatActions";
 
 export type AssistantParams = {
   name: string;
@@ -14,7 +15,7 @@ export async function createAssistant(page: Page, params: AssistantParams) {
   // Navigate to creation flow
   // We assume we're on /chat; if not, go there first
   if (!page.url().includes("/chat")) {
-    await page.goto("http://localhost:3000/chat");
+    await page.goto("/chat");
   }
 
   // Open Assistants modal/list
@@ -22,19 +23,17 @@ export async function createAssistant(page: Page, params: AssistantParams) {
   await page.getByTestId("AgentsPage/new-agent-button").click();
 
   // Fill required fields
-  await page.getByTestId("name").fill(name);
+  await page.locator('input[name="name"]').fill(name);
   if (description) {
-    await page.getByTestId("description").fill(description);
+    await page.locator('textarea[name="description"]').fill(description);
   }
-  await page.getByTestId("system_prompt").fill(instructions);
+  await page.locator('textarea[name="instructions"]').fill(instructions);
 
   // Submit create
   await page.getByRole("button", { name: "Create" }).click();
 
   // Verify it is selected in chat (placeholder contains assistant name)
-  await expect(
-    page.getByPlaceholder(`How can ${name} help you today`)
-  ).toBeVisible({ timeout: 10000 });
+  await verifyAssistantIsChosen(page, name);
 }
 
 // Pin an assistant by its visible name in the sidebar list.
@@ -76,37 +75,30 @@ export async function pinAssistantByName(
  */
 export async function ensureImageGenerationEnabled(page: Page): Promise<void> {
   // Navigate to the default assistant configuration page
-  await page.goto(
-    "http://localhost:3000/admin/configuration/default-assistant"
-  );
+  await page.goto("/admin/configuration/default-assistant");
 
   // Wait for the page to load
   await page.waitForLoadState("networkidle");
 
-  // Find the Image Generation tool toggle
+  // Find the Image Generation tool checkbox
   // The tool display name is "Image Generation" based on the description in the code
-  const imageGenSection = page
-    .locator("div")
-    .filter({ hasText: /^Image Generation/ })
-    .first();
-
-  // Find the switch within this section
-  const switchElement = imageGenSection.locator('button[role="switch"]');
+  // Note: The UI changed from switches to checkboxes
+  const checkboxElement = page.getByLabel("image-generation-checkbox").first();
 
   // Check if it's already enabled
-  const isEnabled = await switchElement.getAttribute("data-state");
+  const isEnabled = Boolean(await checkboxElement.getAttribute("aria-checked"));
 
-  if (isEnabled !== "checked") {
+  if (!isEnabled) {
     // If not enabled, click to enable it
-    await switchElement.click();
+    await checkboxElement.click();
 
     // Wait for the toggle to complete
     await page.waitForTimeout(1000);
 
     // Verify it's now enabled
-    const newState = await switchElement.getAttribute("data-state");
-    if (newState !== "checked") {
-      throw new Error("Failed to enable Image Generation tool");
-    }
+    const newState = Boolean(
+      await checkboxElement.getAttribute("aria-checked")
+    );
+    if (!newState) throw new Error("Failed to enable Image Generation tool");
   }
 }

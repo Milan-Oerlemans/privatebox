@@ -14,7 +14,7 @@ import { ThreeDotsLoader } from "@/components/Loading";
 import { TokenRateLimitDisplay } from "./types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR, { mutate } from "swr";
-import { CustomCheckbox } from "@/components/CustomCheckbox";
+import Checkbox from "@/refresh-components/inputs/Checkbox";
 import { TableHeader } from "@/components/ui/table";
 import Text from "@/components/ui/text";
 
@@ -65,7 +65,7 @@ export const TokenRateLimitTable = ({
 
   if (tokenRateLimits.length === 0) {
     return (
-      <div>
+      <div className="w-full">
         {!hideHeading && title && <Title>{title}</Title>}
         {!hideHeading && description && (
           <Text className="my-2">{description}</Text>
@@ -78,7 +78,7 @@ export const TokenRateLimitTable = ({
   }
 
   return (
-    <div>
+    <div className="w-full">
       {!hideHeading && title && <Title>{title}</Title>}
       {!hideHeading && description && (
         <Text className="my-2">{description}</Text>
@@ -116,9 +116,9 @@ export const TokenRateLimitTable = ({
                       }`}
                     >
                       <div className="flex items-center justify-center">
-                        <CustomCheckbox
+                        <Checkbox
                           checked={tokenRateLimit.enabled}
-                          onChange={
+                          onCheckedChange={
                             isAdmin
                               ? () =>
                                   handleEnabledChange(tokenRateLimit.token_id)

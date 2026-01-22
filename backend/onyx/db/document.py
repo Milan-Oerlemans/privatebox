@@ -22,7 +22,6 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.expression import null
 
-from onyx.agents.agent_search.kb_search.models import KGEntityDocInfo
 from onyx.configs.constants import DEFAULT_BOOST
 from onyx.configs.constants import DocumentSource
 from onyx.configs.kg_configs import KG_SIMPLE_ANSWER_MAX_DISPLAYED_SOURCES
@@ -36,7 +35,6 @@ from onyx.db.feedback import delete_document_feedback_for_documents__no_commit
 from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
-from onyx.db.models import Document
 from onyx.db.models import Document as DbDocument
 from onyx.db.models import DocumentByConnectorCredentialPair
 from onyx.db.models import KGEntity
@@ -227,6 +225,38 @@ def get_documents_by_ids(
     return list(documents)
 
 
+def filter_existing_document_ids(
+    db_session: Session,
+    document_ids: list[str],
+) -> set[str]:
+    """Filter a list of document IDs to only those that exist in the database.
+
+    Args:
+        db_session: Database session
+        document_ids: List of document IDs to check for existence
+
+    Returns:
+        Set of document IDs from the input list that exist in the database
+    """
+    if not document_ids:
+        return set()
+    stmt = select(DbDocument.id).where(DbDocument.id.in_(document_ids))
+    return set(db_session.execute(stmt).scalars().all())
+
+
+def fetch_document_ids_by_links(
+    db_session: Session,
+    links: list[str],
+) -> dict[str, str]:
+    """Fetch document IDs for documents whose link matches any of the provided values."""
+    if not links:
+        return {}
+
+    stmt = select(DbDocument.link, DbDocument.id).where(DbDocument.link.in_(links))
+    rows = db_session.execute(stmt).all()
+    return {link: doc_id for link, doc_id in rows if link}
+
+
 def get_document_connector_count(
     db_session: Session,
     document_id: str,
@@ -292,7 +322,7 @@ def get_document_counts_for_cc_pairs(
             )
         )
 
-        for connector_id, credential_id, cnt in db_session.execute(stmt).all():  # type: ignore
+        for connector_id, credential_id, cnt in db_session.execute(stmt).all():
             aggregated_counts[(connector_id, credential_id)] = cnt
 
     # Convert aggregated results back to the expected sequence of tuples
@@ -414,6 +444,8 @@ def upsert_documents(
         logger.info("No documents to upsert. Skipping.")
         return
 
+    includes_permissions = any(doc.external_access for doc in seen_documents.values())
+
     insert_stmt = insert(DbDocument).values(
         [
             model_to_dict(
@@ -449,21 +481,38 @@ def upsert_documents(
         ]
     )
 
+    update_set = {
+        "from_ingestion_api": insert_stmt.excluded.from_ingestion_api,
+        "boost": insert_stmt.excluded.boost,
+        "hidden": insert_stmt.excluded.hidden,
+        "semantic_id": insert_stmt.excluded.semantic_id,
+        "link": insert_stmt.excluded.link,
+        "primary_owners": insert_stmt.excluded.primary_owners,
+        "secondary_owners": insert_stmt.excluded.secondary_owners,
+        "doc_metadata": insert_stmt.excluded.doc_metadata,
+    }
+    if includes_permissions:
+        # Use COALESCE to preserve existing permissions when new values are NULL.
+        # This prevents subsequent indexing runs (which don't fetch permissions)
+        # from overwriting permissions set by permission sync jobs.
+        update_set.update(
+            {
+                "external_user_emails": func.coalesce(
+                    insert_stmt.excluded.external_user_emails,
+                    DbDocument.external_user_emails,
+                ),
+                "external_user_group_ids": func.coalesce(
+                    insert_stmt.excluded.external_user_group_ids,
+                    DbDocument.external_user_group_ids,
+                ),
+                "is_public": func.coalesce(
+                    insert_stmt.excluded.is_public,
+                    DbDocument.is_public,
+                ),
+            }
+        )
     on_conflict_stmt = insert_stmt.on_conflict_do_update(
-        index_elements=["id"],  # Conflict target
-        set_={
-            "from_ingestion_api": insert_stmt.excluded.from_ingestion_api,
-            "boost": insert_stmt.excluded.boost,
-            "hidden": insert_stmt.excluded.hidden,
-            "semantic_id": insert_stmt.excluded.semantic_id,
-            "link": insert_stmt.excluded.link,
-            "primary_owners": insert_stmt.excluded.primary_owners,
-            "secondary_owners": insert_stmt.excluded.secondary_owners,
-            "external_user_emails": insert_stmt.excluded.external_user_emails,
-            "external_user_group_ids": insert_stmt.excluded.external_user_group_ids,
-            "is_public": insert_stmt.excluded.is_public,
-            "doc_metadata": insert_stmt.excluded.doc_metadata,
-        },
+        index_elements=["id"], set_=update_set  # Conflict target
     )
     db_session.execute(on_conflict_stmt)
     db_session.commit()
@@ -681,11 +730,6 @@ def delete_documents_complete__no_commit(
     )
 
     # Continue with deleting the chunk stats for the documents
-    delete_chunk_stats_by_connector_credential_pair__no_commit(
-        db_session=db_session,
-        document_ids=document_ids,
-    )
-
     delete_chunk_stats_by_connector_credential_pair__no_commit(
         db_session=db_session,
         document_ids=document_ids,
@@ -1105,7 +1149,7 @@ def reset_all_document_kg_stages(db_session: Session) -> int:
 
     # The hasattr check is needed for type checking, even though rowcount
     # is guaranteed to exist at runtime for UPDATE operations
-    return result.rowcount if hasattr(result, "rowcount") else 0  # type: ignore
+    return result.rowcount if hasattr(result, "rowcount") else 0
 
 
 def update_document_kg_stages(
@@ -1128,7 +1172,7 @@ def update_document_kg_stages(
     result = db_session.execute(stmt)
     # The hasattr check is needed for type checking, even though rowcount
     # is guaranteed to exist at runtime for UPDATE operations
-    return result.rowcount if hasattr(result, "rowcount") else 0  # type: ignore
+    return result.rowcount if hasattr(result, "rowcount") else 0
 
 
 def get_skipped_kg_documents(db_session: Session) -> list[str]:
@@ -1144,35 +1188,35 @@ def get_skipped_kg_documents(db_session: Session) -> list[str]:
     return list(db_session.scalars(stmt).all())
 
 
-def get_kg_doc_info_for_entity_name(
-    db_session: Session, document_id: str, entity_type: str
-) -> KGEntityDocInfo:
-    """
-    Get the semantic ID and the link for an entity name.
-    """
+# def get_kg_doc_info_for_entity_name(
+#     db_session: Session, document_id: str, entity_type: str
+# ) -> KGEntityDocInfo:
+#     """
+#     Get the semantic ID and the link for an entity name.
+#     """
 
-    result = (
-        db_session.query(Document.semantic_id, Document.link)
-        .filter(Document.id == document_id)
-        .first()
-    )
+#     result = (
+#         db_session.query(Document.semantic_id, Document.link)
+#         .filter(Document.id == document_id)
+#         .first()
+#     )
 
-    if result is None:
-        return KGEntityDocInfo(
-            doc_id=None,
-            doc_semantic_id=None,
-            doc_link=None,
-            semantic_entity_name=f"{entity_type}:{document_id}",
-            semantic_linked_entity_name=f"{entity_type}:{document_id}",
-        )
+#     if result is None:
+#         return KGEntityDocInfo(
+#             doc_id=None,
+#             doc_semantic_id=None,
+#             doc_link=None,
+#             semantic_entity_name=f"{entity_type}:{document_id}",
+#             semantic_linked_entity_name=f"{entity_type}:{document_id}",
+#         )
 
-    return KGEntityDocInfo(
-        doc_id=document_id,
-        doc_semantic_id=result[0],
-        doc_link=result[1],
-        semantic_entity_name=f"{entity_type.upper()}:{result[0]}",
-        semantic_linked_entity_name=f"[{entity_type.upper()}:{result[0]}]({result[1]})",
-    )
+#     return KGEntityDocInfo(
+#         doc_id=document_id,
+#         doc_semantic_id=result[0],
+#         doc_link=result[1],
+#         semantic_entity_name=f"{entity_type.upper()}:{result[0]}",
+#         semantic_linked_entity_name=f"[{entity_type.upper()}:{result[0]}]({result[1]})",
+#     )
 
 
 def check_for_documents_needing_kg_processing(

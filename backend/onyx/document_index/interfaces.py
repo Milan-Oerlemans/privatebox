@@ -5,10 +5,10 @@ from typing import Any
 
 from onyx.access.models import DocumentAccess
 from onyx.access.models import ExternalAccess
-from onyx.agents.agent_search.shared_graph_utils.models import QueryExpansionType
 from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
 from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import InferenceChunkUncleaned
+from onyx.context.search.models import InferenceChunk
+from onyx.context.search.models import QueryExpansionType
 from onyx.db.enums import EmbeddingPrecision
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from shared_configs.model_server_models import Embedding
@@ -108,10 +108,6 @@ class VespaDocumentFields:
     boost: float | None = None
     hidden: bool | None = None
     aggregated_chunk_boost_factor: float | None = None
-
-    # document_id is added for migration purposes, ideally we should not be updating this field
-    # TODO(subash): remove this field in a future migration
-    document_id: str | None = None
 
 
 @dataclass
@@ -279,7 +275,7 @@ class Updatable(abc.ABC):
         chunk_count: int | None,
         fields: VespaDocumentFields | None,
         user_fields: VespaDocumentUserFields | None,
-    ) -> int:
+    ) -> None:
         """
         Updates all chunks for a document with the specified fields.
         None values mean that the field does not need an update.
@@ -324,7 +320,7 @@ class IdRetrievalCapable(abc.ABC):
         chunk_requests: list[VespaChunkRequest],
         filters: IndexFilters,
         batch_retrieval: bool = False,
-    ) -> list[InferenceChunkUncleaned]:
+    ) -> list[InferenceChunk]:
         """
         Fetch chunk(s) based on document id
 
@@ -363,7 +359,7 @@ class HybridCapable(abc.ABC):
         ranking_profile_type: QueryExpansionType,
         offset: int = 0,
         title_content_ratio: float | None = TITLE_CONTENT_RATIO,
-    ) -> list[InferenceChunkUncleaned]:
+    ) -> list[InferenceChunk]:
         """
         Run hybrid search and return a list of inference chunks.
 
@@ -414,7 +410,7 @@ class AdminCapable(abc.ABC):
         filters: IndexFilters,
         num_to_retrieve: int,
         offset: int = 0,
-    ) -> list[InferenceChunkUncleaned]:
+    ) -> list[InferenceChunk]:
         """
         Run the special search for the admin document explorer page
 
@@ -438,7 +434,7 @@ class RandomCapable(abc.ABC):
         self,
         filters: IndexFilters,
         num_to_retrieve: int = 10,
-    ) -> list[InferenceChunkUncleaned]:
+    ) -> list[InferenceChunk]:
         """Retrieve random chunks matching the filters"""
         raise NotImplementedError
 

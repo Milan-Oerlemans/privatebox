@@ -1,11 +1,12 @@
 import { JSX } from "react";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
-import { Packet } from "../../services/streamingModels";
+import { Packet, StopReason } from "../../services/streamingModels";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { ProjectFile } from "../../projects/projectsService";
 import { LlmDescriptor } from "@/lib/hooks";
 import { IconType } from "react-icons";
 import { OnyxIconType } from "@/components/icons/icons";
+import { CitationMap } from "../../interfaces";
 
 export enum RenderType {
   HIGHLIGHT = "highlight",
@@ -17,7 +18,7 @@ export interface FullChatState {
   // Document-related context for citations
   docs?: OnyxDocument[] | null;
   userFiles?: ProjectFile[];
-  citations?: { [key: string]: number };
+  citations?: CitationMap;
   setPresentingDocument?: (document: MinimalOnyxDocument) => void;
   // Regenerate functionality
   regenerate?: (modelOverRide: LlmDescriptor) => Promise<void>;
@@ -27,7 +28,7 @@ export interface FullChatState {
 
 export interface RendererResult {
   icon: IconType | OnyxIconType | null;
-  status: string | null;
+  status: string | JSX.Element | null;
   content: JSX.Element;
 
   // can be used to override the look on the "expanded" view
@@ -46,5 +47,6 @@ export type MessageRenderer<
   renderType: RenderType;
   animate: boolean;
   stopPacketSeen: boolean;
+  stopReason?: StopReason;
   children: (result: RendererResult) => JSX.Element;
 }>;

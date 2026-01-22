@@ -9,6 +9,7 @@ from typing import TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel
+from pydantic import ConfigDict
 from pydantic import Field
 
 from onyx.configs.app_configs import MASK_CREDENTIAL_PREFIX
@@ -52,6 +53,11 @@ class DocumentInfo(BaseModel):
 class ChunkInfo(BaseModel):
     content: str
     num_tokens: int
+
+
+class IndexedSourcesResponse(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+    sources: list[DocumentSource]
 
 
 class DeletionAttemptSnapshot(BaseModel):
@@ -127,7 +133,6 @@ class CredentialBase(BaseModel):
     name: str | None = None
     curator_public: bool = False
     groups: list[int] = Field(default_factory=list)
-    is_user_file: bool = False
 
 
 class CredentialSnapshot(CredentialBase):
@@ -563,6 +568,17 @@ class FileUploadResponse(BaseModel):
     file_paths: list[str]
     file_names: list[str]
     zip_metadata: dict[str, Any]
+
+
+class ConnectorFileInfo(BaseModel):
+    file_id: str
+    file_name: str
+    file_size: int | None = None
+    upload_date: str | None = None
+
+
+class ConnectorFilesResponse(BaseModel):
+    files: list[ConnectorFileInfo]
 
 
 class ObjectCreationIdResponse(BaseModel):

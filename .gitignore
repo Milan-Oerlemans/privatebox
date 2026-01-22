@@ -1,6 +1,10 @@
 # editors
 .vscode
+!/.vscode/env_template.txt
+!/.vscode/launch.json
+!/.vscode/tasks.template.jsonc
 .zed
+.cursor
 
 # macos
 .DS_store
@@ -20,6 +24,7 @@ backend/tests/regression/search_quality/*.json
 backend/onyx/evals/data/
 backend/onyx/evals/one_off/*.json
 *.log
+*.csv
 
 # secret files
 .env
@@ -28,6 +33,8 @@ settings.json
 
 # others
 /deployment/data/nginx/app.conf
+/deployment/data/nginx/mcp.conf.inc
+/deployment/data/nginx/mcp_upstream.conf.inc
 *.sw?
 /backend/tests/regression/answer_quality/search_test_config.yaml
 *.egg-info
@@ -46,6 +53,11 @@ CLAUDE.md
 # Local .terraform.lock.hcl file
 .terraform.lock.hcl
 
+node_modules
+
 # MCP configs
 .playwright-mcp
 deployment/docker_compose/env.txt
+
+# plans
+plans/

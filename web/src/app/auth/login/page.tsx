@@ -7,8 +7,10 @@ import {
   AuthTypeMetadata,
 } from "@/lib/userSS";
 import { redirect } from "next/navigation";
+import type { Route } from "next";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import LoginPage from "./LoginPage";
+import { AuthType } from "@/lib/constants";
 
 export interface PageProps {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -17,6 +19,8 @@ export interface PageProps {
 export default async function Page(props: PageProps) {
   const searchParams = await props.searchParams;
   const autoRedirectDisabled = searchParams?.disableAutoRedirect === "true";
+  const autoRedirectToSignupDisabled =
+    searchParams?.autoRedirectToSignup === "false";
   const nextUrl = Array.isArray(searchParams?.next)
     ? searchParams?.next[0]
     : searchParams?.next || null;
@@ -36,8 +40,19 @@ export default async function Page(props: PageProps) {
   }
 
   // simply take the user to the home page if Auth is disabled
-  if (authTypeMetadata?.authType === "disabled") {
+  if (authTypeMetadata?.authType === AuthType.DISABLED) {
     return redirect("/chat");
+  }
+
+  // if there are no users, redirect to signup page for initial setup
+  // (only for auth types that support self-service signup)
+  if (
+    authTypeMetadata &&
+    !authTypeMetadata.hasUsers &&
+    !autoRedirectToSignupDisabled &&
+    authTypeMetadata.authType === AuthType.BASIC
+  ) {
+    return redirect("/auth/signup");
   }
 
   // if user is already logged in, take them to the main app page
@@ -68,14 +83,14 @@ export default async function Page(props: PageProps) {
   }
 
   if (authTypeMetadata?.autoRedirect && authUrl && !autoRedirectDisabled) {
-    return redirect(authUrl);
+    return redirect(authUrl as Route);
   }
 
   const ssoLoginFooterContent =
     authTypeMetadata &&
-    (authTypeMetadata.authType === "google_oauth" ||
-      authTypeMetadata.authType === "oidc" ||
-      authTypeMetadata.authType === "saml") ? (
+    (authTypeMetadata.authType === AuthType.GOOGLE_OAUTH ||
+      authTypeMetadata.authType === AuthType.OIDC ||
+      authTypeMetadata.authType === AuthType.SAML) ? (
       <>Need access? Reach out to your IT admin to get access.</>
     ) : undefined;
 

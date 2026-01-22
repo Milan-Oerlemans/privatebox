@@ -1,5 +1,3 @@
-from uuid import UUID
-
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
@@ -8,19 +6,11 @@ from sqlalchemy.orm import Session
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
 from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import MessageType
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.preprocessing.access_filters import (
     build_access_filters_for_user,
 )
-from onyx.db.chat import get_chat_messages_by_session
-from onyx.db.chat import get_chat_session_by_id
-from onyx.db.chat import get_chat_sessions_by_user
-from onyx.db.chat import get_search_docs_for_chat_message
-from onyx.db.chat import get_valid_messages_from_query_sessions
-from onyx.db.chat import translate_db_message_to_chat_message_detail
-from onyx.db.chat import translate_db_search_doc_to_server_search_doc
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
 from onyx.db.search_settings import get_current_search_settings
@@ -29,9 +19,6 @@ from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.vespa.index import VespaIndex
 from onyx.server.query_and_chat.models import AdminSearchRequest
 from onyx.server.query_and_chat.models import AdminSearchResponse
-from onyx.server.query_and_chat.models import ChatSessionDetails
-from onyx.server.query_and_chat.models import ChatSessionsResponse
-from onyx.server.query_and_chat.models import SearchSessionDetailResponse
 from onyx.server.query_and_chat.models import SourceTag
 from onyx.server.query_and_chat.models import TagResponse
 from onyx.utils.logger import setup_logger
@@ -64,6 +51,7 @@ def admin_search(
         tenant_id=tenant_id,
     )
     search_settings = get_current_search_settings(db_session)
+    # This flow is for search so we do not get all indices.
     document_index = get_default_document_index(search_settings, None)
 
     if not isinstance(document_index, VespaIndex):
@@ -130,103 +118,3 @@ def get_tags(
         for db_tag in db_tags
     ]
     return TagResponse(tags=server_tags)
-
-
-@basic_router.get("/user-searches")
-def get_user_search_sessions(
-    user: User | None = Depends(current_user),
-    db_session: Session = Depends(get_session),
-) -> ChatSessionsResponse:
-    user_id = user.id if user is not None else None
-
-    try:
-        search_sessions = get_chat_sessions_by_user(
-            user_id=user_id, deleted=False, db_session=db_session
-        )
-    except ValueError:
-        raise HTTPException(
-            status_code=404, detail="Chat session does not exist or has been deleted"
-        )
-    # Extract IDs from search sessions
-    search_session_ids = [chat.id for chat in search_sessions]
-    # Fetch first messages for each session, only including those with documents
-    sessions_with_documents = get_valid_messages_from_query_sessions(
-        search_session_ids, db_session
-    )
-    sessions_with_documents_dict = dict(sessions_with_documents)
-
-    # Prepare response with detailed information for each valid search session
-    response = ChatSessionsResponse(
-        sessions=[
-            ChatSessionDetails(
-                id=search.id,
-                name=sessions_with_documents_dict[search.id],
-                persona_id=search.persona_id,
-                time_created=search.time_created.isoformat(),
-                time_updated=search.time_updated.isoformat(),
-                shared_status=search.shared_status,
-                current_alternate_model=search.current_alternate_model,
-            )
-            for search in search_sessions
-            if search.id
-            in sessions_with_documents_dict  # Only include sessions with documents
-        ]
-    )
-
-    return response
-
-
-@basic_router.get("/search-session/{session_id}")
-def get_search_session(
-    session_id: UUID,
-    is_shared: bool = False,
-    user: User | None = Depends(current_user),
-    db_session: Session = Depends(get_session),
-) -> SearchSessionDetailResponse:
-    user_id = user.id if user is not None else None
-
-    try:
-        search_session = get_chat_session_by_id(
-            chat_session_id=session_id,
-            user_id=user_id,
-            db_session=db_session,
-            is_shared=is_shared,
-        )
-    except ValueError:
-        raise ValueError("Search session does not exist or has been deleted")
-
-    session_messages = get_chat_messages_by_session(
-        chat_session_id=session_id,
-        user_id=user_id,
-        db_session=db_session,
-        # we already did a permission check above with the call to
-        # `get_chat_session_by_id`, so we can skip it here
-        skip_permission_check=True,
-        # we need the tool call objs anyways, so just fetch them in a single call
-        prefetch_tool_calls=True,
-    )
-    docs_response: list[SearchDoc] = []
-    for message in session_messages:
-        if (
-            message.message_type == MessageType.ASSISTANT
-            or message.message_type == MessageType.SYSTEM
-        ):
-            docs = get_search_docs_for_chat_message(
-                db_session=db_session, chat_message_id=message.id
-            )
-            for doc in docs:
-                server_doc = translate_db_search_doc_to_server_search_doc(doc)
-                docs_response.append(server_doc)
-
-    response = SearchSessionDetailResponse(
-        search_session_id=session_id,
-        description=search_session.description,
-        documents=docs_response,
-        messages=[
-            translate_db_message_to_chat_message_detail(
-                msg, remove_doc_content=is_shared  # if shared, don't leak doc content
-            )
-            for msg in session_messages
-        ],
-    )
-    return response

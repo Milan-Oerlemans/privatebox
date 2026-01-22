@@ -25,12 +25,11 @@ import ReactMarkdown from "react-markdown";
 import { FaMarkdown } from "react-icons/fa";
 import { useState, useEffect, memo, JSX } from "react";
 import remarkGfm from "remark-gfm";
-import { Checkbox } from "@/components/ui/checkbox";
+import Checkbox from "@/refresh-components/inputs/Checkbox";
 
 import { transformLinkUri } from "@/lib/utils";
 import FileInput from "@/app/admin/connectors/[connector]/pages/ConnectorInput/FileInput";
-import { DatePicker } from "./ui/datePicker";
-import { Textarea, TextareaProps } from "./ui/textarea";
+import InputDatePicker from "@/refresh-components/inputs/InputDatePicker";
 import { RichTextSubtext } from "./RichTextSubtext";
 import {
   TypedFile,
@@ -41,9 +40,11 @@ import {
 import Text from "@/refresh-components/texts/Text";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 
-import SvgEye from "@/icons/eye";
-import SvgEyeClosed from "@/icons/eye-closed";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import InputTextArea, {
+  InputTextAreaProps,
+} from "@/refresh-components/inputs/InputTextArea";
+import { SvgEye, SvgEyeClosed } from "@opal/icons";
 
 export function SectionHeader({
   children,
@@ -138,7 +139,7 @@ export function ExplanationText({
       {text}
     </a>
   ) : (
-    <Text text03 secondaryBody>
+    <Text as="p" text03 secondaryBody>
       {text}
     </Text>
   );
@@ -180,7 +181,11 @@ export const FieldLabel = ({
       } gap-x-2 items-start`}
     >
       <div className="flex gap-x-2 items-center">
-        {!removeLabel && <Label small={false}>{label}</Label>}
+        {!removeLabel && (
+          <Label small={false} htmlFor={name}>
+            {label}
+          </Label>
+        )}
         {optional ? <span>(optional) </span> : ""}
         {tooltip && <ToolTipDetails>{tooltip}</ToolTipDetails>}
       </div>
@@ -210,7 +215,7 @@ export function TextFormField({
   includeRevert,
   isTextArea = false,
   disabled = false,
-  autoCompleteDisabled = true,
+  autoCompleteEnabled = false,
   error,
   defaultHeight,
   isCode = false,
@@ -239,7 +244,7 @@ export function TextFormField({
   type?: string;
   isTextArea?: boolean;
   disabled?: boolean;
-  autoCompleteDisabled?: boolean;
+  autoCompleteEnabled?: boolean;
   error?: string;
   defaultHeight?: string;
   isCode?: boolean;
@@ -360,7 +365,7 @@ export function TextFormField({
           `}
           disabled={disabled}
           placeholder={placeholder}
-          autoComplete={autoCompleteDisabled ? "off" : undefined}
+          autoComplete={autoCompleteEnabled ? undefined : "off"}
         />
         {!isTextArea && isPasswordField && showPasswordToggle && (
           <button
@@ -719,6 +724,7 @@ export const BooleanFormField = memo(function BooleanFormField({
               tooltip={disabledTooltip}
             >
               <Checkbox
+                aria-label={`${label.toLowerCase().replace(" ", "-")}-checkbox`}
                 id={checkboxId}
                 className={`
                      ${disabled ? "opacity-50" : ""}
@@ -1035,7 +1041,7 @@ export function DatePickerField({
   return (
     <div>
       <FieldLabel label={label} name={name} subtext={subtext} />
-      <DatePicker
+      <InputDatePicker
         selectedDate={field.value}
         setSelectedDate={helper.setValue}
         startYear={startYear}
@@ -1045,7 +1051,7 @@ export function DatePickerField({
   );
 }
 
-export interface TextAreaFieldProps extends TextareaProps {
+export interface TextAreaFieldProps extends InputTextAreaProps {
   name: string;
 }
 
@@ -1053,10 +1059,10 @@ export function TextAreaField(props: TextAreaFieldProps) {
   const [field, _, helper] = useField<string>(props.name);
 
   return (
-    <Textarea
+    <InputTextArea
       value={field.value}
-      onChange={(e) => {
-        helper.setValue(e.target.value);
+      onChange={(event) => {
+        helper.setValue(event.target.value);
       }}
       {...props}
     />

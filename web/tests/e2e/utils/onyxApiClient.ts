@@ -25,6 +25,12 @@ import { Page, expect, APIResponse } from "@playwright/test";
  * - `createUserGroup(name)` - Creates a user group
  * - `deleteUserGroup(id)` - Deletes a user group
  *
+ * **Tool Providers:**
+ * - `createWebSearchProvider(type, name)` - Creates and activates a web search provider
+ * - `deleteWebSearchProvider(id)` - Deletes a web search provider
+ * - `createImageGenerationConfig(id, model, provider, isDefault)` - Creates an image generation config (enables image gen tool)
+ * - `deleteImageGenerationConfig(id)` - Deletes an image generation config
+ *
  * **Usage Example:**
  * ```typescript
  * const client = new OnyxApiClient(page);
@@ -37,7 +43,7 @@ import { Page, expect, APIResponse } from "@playwright/test";
  * @param page - Playwright Page instance with authenticated session
  */
 export class OnyxApiClient {
-  private baseUrl = "http://localhost:3000/api";
+  private baseUrl = `${process.env.BASE_URL || "http://localhost:3000"}/api`;
 
   constructor(private page: Page) {}
 
@@ -72,6 +78,19 @@ export class OnyxApiClient {
    */
   private async delete(endpoint: string): Promise<APIResponse> {
     return await this.page.request.delete(`${this.baseUrl}${endpoint}`);
+  }
+
+  /**
+   * Generic PUT request to the API.
+   *
+   * @param endpoint - API endpoint path (e.g., "/manage/admin/cc-pair/123/status")
+   * @param data - Optional request body data
+   * @returns The API response
+   */
+  private async put(endpoint: string, data?: any): Promise<APIResponse> {
+    return await this.page.request.put(`${this.baseUrl}${endpoint}`, {
+      data,
+    });
   }
 
   /**
@@ -194,7 +213,28 @@ export class OnyxApiClient {
       `Created file connector: ${connectorName} (CC Pair ID: ${ccPairId})`
     );
 
+    // Pause the connector immediately to prevent indexing during tests
+    await this.pauseConnector(ccPairId);
+
     return ccPairId;
+  }
+
+  /**
+   * Pauses a connector-credential pair to prevent indexing.
+   *
+   * @param ccPairId - The connector-credential pair ID to pause
+   * @throws Error if the pause operation fails
+   */
+  async pauseConnector(ccPairId: number): Promise<void> {
+    const response = await this.put(
+      `/manage/admin/cc-pair/${ccPairId}/status`,
+      {
+        status: "PAUSED",
+      }
+    );
+
+    await this.handleResponse(response, "Failed to pause connector");
+    this.log(`Paused connector CC Pair ID: ${ccPairId}`);
   }
 
   /**
@@ -331,7 +371,6 @@ export class OnyxApiClient {
           provider: "openai",
           api_key: "test-key",
           default_model_name: "gpt-4o",
-          fast_default_model_name: "gpt-4o-mini",
           is_public: false,
           groups: [groupId],
           personas: [],
@@ -556,6 +595,288 @@ export class OnyxApiClient {
     await this.handleResponse(
       response,
       `Failed to update curator status for ${userId}`
+    );
+  }
+
+  /**
+   * Create and activate a web search provider for testing.
+   * Uses a dummy API key that won't actually work, but allows the tool to be available.
+   *
+   * @param providerType - Type of provider: "exa", "serper", "google_pse", "searxng"
+   * @param name - Optional name for the provider (defaults to "Test Provider")
+   * @returns The created provider ID
+   */
+  async createWebSearchProvider(
+    providerType: "exa" | "serper" | "google_pse" | "searxng" = "exa",
+    name: string = "Test Provider"
+  ): Promise<number> {
+    const config: Record<string, string> = {};
+    if (providerType === "google_pse") {
+      config.search_engine_id = "test-engine-id";
+    }
+    if (providerType === "searxng") {
+      config.searxng_base_url = "https://test-searxng.example.com";
+    }
+
+    const response = await this.post("/admin/web-search/search-providers", {
+      name,
+      provider_type: providerType,
+      api_key: "test-api-key-12345",
+      api_key_changed: true,
+      config: Object.keys(config).length > 0 ? config : undefined,
+      activate: true,
+    });
+
+    const data = await this.handleResponse<{ id: number }>(
+      response,
+      `Failed to create web search provider ${providerType}`
+    );
+    return data.id;
+  }
+
+  /**
+   * Delete a web search provider.
+   *
+   * @param providerId - ID of the provider to delete
+   */
+  async deleteWebSearchProvider(providerId: number): Promise<void> {
+    const response = await this.delete(
+      `/admin/web-search/search-providers/${providerId}`
+    );
+    if (!response.ok()) {
+      const errorText = await response.text();
+      console.warn(
+        `Failed to delete web search provider ${providerId}: ${response.status()} - ${errorText}`
+      );
+    }
+  }
+
+  /**
+   * Creates an image generation configuration for testing.
+   * This enables the image generation tool in assistants.
+   *
+   * API: POST /api/admin/image-generation/config
+   * Schema (ImageGenerationConfigCreate):
+   *   - image_provider_id: string (required) - unique key
+   *   - model_name: string (required) - e.g., "dall-e-3"
+   *   - provider: string - e.g., "openai"
+   *   - api_key: string
+   *   - is_default: boolean
+   *
+   * @param imageProviderId - Unique identifier for the image generation config
+   * @param modelName - Model name (defaults to "dall-e-3")
+   * @param provider - Provider name (defaults to "openai")
+   * @param isDefault - Whether this should be the default config (defaults to true)
+   * @returns The image_provider_id
+   */
+  async createImageGenerationConfig(
+    imageProviderId: string,
+    modelName: string = "dall-e-3",
+    provider: string = "openai",
+    isDefault: boolean = true
+  ): Promise<string> {
+    const response = await this.post("/admin/image-generation/config", {
+      image_provider_id: imageProviderId,
+      model_name: modelName,
+      provider: provider,
+      api_key: "test-api-key", // Dummy key - enables tool visibility
+      is_default: isDefault,
+    });
+
+    await this.handleResponse(
+      response,
+      "Failed to create image generation config"
+    );
+
+    this.log(`Created image generation config: ${imageProviderId}`);
+    return imageProviderId;
+  }
+
+  /**
+   * Deletes an image generation configuration.
+   *
+   * @param imageProviderId - The image_provider_id to delete
+   */
+  async deleteImageGenerationConfig(imageProviderId: string): Promise<void> {
+    const response = await this.delete(
+      `/admin/image-generation/config/${imageProviderId}`
+    );
+
+    await this.handleResponseSoft(
+      response,
+      `Failed to delete image generation config ${imageProviderId}`
+    );
+
+    this.log(`Deleted image generation config: ${imageProviderId}`);
+  }
+
+  // === Discord Bot Methods ===
+
+  /**
+   * Creates a Discord guild configuration.
+   * Returns the guild config with registration key (shown once).
+   *
+   * @returns The created guild config with id and registration_key
+   */
+  async createDiscordGuild(): Promise<{
+    id: number;
+    registration_key: string;
+    guild_name: string | null;
+  }> {
+    const response = await this.post("/manage/admin/discord-bot/guilds");
+
+    const guild = await this.handleResponse<{
+      id: number;
+      registration_key: string;
+      guild_name: string | null;
+    }>(response, "Failed to create Discord guild config");
+
+    this.log(
+      `Created Discord guild config: id=${guild.id}, registration_key=${guild.registration_key}`
+    );
+    return guild;
+  }
+
+  /**
+   * Lists all Discord guild configurations.
+   *
+   * @returns Array of guild configs
+   */
+  async listDiscordGuilds(): Promise<
+    Array<{
+      id: number;
+      guild_id: string | null;
+      guild_name: string | null;
+      enabled: boolean;
+    }>
+  > {
+    const response = await this.get("/manage/admin/discord-bot/guilds");
+    return await this.handleResponse(response, "Failed to list Discord guilds");
+  }
+
+  /**
+   * Gets a specific Discord guild configuration.
+   *
+   * @param guildId - The internal guild config ID
+   * @returns The guild config or null if not found
+   */
+  async getDiscordGuild(guildId: number): Promise<{
+    id: number;
+    guild_id: string | null;
+    guild_name: string | null;
+    enabled: boolean;
+    default_persona_id: number | null;
+  } | null> {
+    const response = await this.get(
+      `/manage/admin/discord-bot/guilds/${guildId}`
+    );
+    if (response.status() === 404) {
+      return null;
+    }
+    return await this.handleResponse(
+      response,
+      `Failed to get Discord guild ${guildId}`
+    );
+  }
+
+  /**
+   * Updates a Discord guild configuration.
+   *
+   * @param guildId - The internal guild config ID
+   * @param updates - The fields to update
+   * @returns The updated guild config
+   */
+  async updateDiscordGuild(
+    guildId: number,
+    updates: { enabled?: boolean; default_persona_id?: number | null }
+  ): Promise<{
+    id: number;
+    guild_id: string | null;
+    guild_name: string | null;
+    enabled: boolean;
+  }> {
+    const response = await this.page.request.patch(
+      `${this.baseUrl}/manage/admin/discord-bot/guilds/${guildId}`,
+      { data: updates }
+    );
+    return await this.handleResponse(
+      response,
+      `Failed to update Discord guild ${guildId}`
+    );
+  }
+
+  /**
+   * Deletes a Discord guild configuration.
+   *
+   * @param guildId - The internal guild config ID
+   */
+  async deleteDiscordGuild(guildId: number): Promise<void> {
+    const response = await this.delete(
+      `/manage/admin/discord-bot/guilds/${guildId}`
+    );
+
+    await this.handleResponseSoft(
+      response,
+      `Failed to delete Discord guild ${guildId}`
+    );
+
+    this.log(`Deleted Discord guild config: ${guildId}`);
+  }
+
+  /**
+   * Lists channels for a Discord guild configuration.
+   *
+   * @param guildConfigId - The internal guild config ID
+   * @returns Array of channel configs
+   */
+  async listDiscordChannels(guildConfigId: number): Promise<
+    Array<{
+      id: number;
+      channel_id: string;
+      channel_name: string;
+      channel_type: string;
+      enabled: boolean;
+    }>
+  > {
+    const response = await this.get(
+      `/manage/admin/discord-bot/guilds/${guildConfigId}/channels`
+    );
+    return await this.handleResponse(
+      response,
+      `Failed to list channels for guild ${guildConfigId}`
+    );
+  }
+
+  /**
+   * Updates a Discord channel configuration.
+   *
+   * @param guildConfigId - The internal guild config ID
+   * @param channelConfigId - The internal channel config ID
+   * @param updates - The fields to update
+   * @returns The updated channel config
+   */
+  async updateDiscordChannel(
+    guildConfigId: number,
+    channelConfigId: number,
+    updates: {
+      enabled?: boolean;
+      thread_only_mode?: boolean;
+      require_bot_invocation?: boolean;
+      persona_override_id?: number | null;
+    }
+  ): Promise<{
+    id: number;
+    channel_id: string;
+    channel_name: string;
+    enabled: boolean;
+  }> {
+    const response = await this.page.request.patch(
+      `${this.baseUrl}/manage/admin/discord-bot/guilds/${guildConfigId}/channels/${channelConfigId}`,
+      { data: updates }
+    );
+    return await this.handleResponse(
+      response,
+      `Failed to update channel ${channelConfigId}`
     );
   }
 }

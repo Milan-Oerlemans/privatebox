@@ -5,21 +5,23 @@ import Link from "next/link";
 import { ChatSessionMorePopup } from "@/components/sidebar/ChatSessionMorePopup";
 import { useProjectsContext } from "../../projects/ProjectsContext";
 import { ChatSession } from "@/app/chat/interfaces";
-import AgentIcon from "@/refresh-components/AgentIcon";
-import SvgBubbleText from "@/icons/bubble-text";
-import { useAgentsContext } from "@/refresh-components/contexts/AgentsContext";
+import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
+import { useAgents } from "@/hooks/useAgents";
 import { formatRelativeTime } from "./project_utils";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import { UNNAMED_CHAT } from "@/lib/constants";
+import ChatSessionSkeleton from "@/refresh-components/skeletons/ChatSessionSkeleton";
+import { SvgBubbleText } from "@opal/icons";
 
 export default function ProjectChatSessionList() {
   const {
     currentProjectDetails,
     currentProjectId,
     refreshCurrentProjectDetails,
+    isLoadingProjectDetails,
   } = useProjectsContext();
-  const { agents: assistants } = useAgentsContext();
+  const { agents: assistants } = useAgents();
   const [isRenamingChat, setIsRenamingChat] = React.useState<string | null>(
     null
   );
@@ -38,13 +40,19 @@ export default function ProjectChatSessionList() {
   return (
     <div className="flex flex-col gap-2 px-2 w-full max-w-[800px] mx-auto mt-6">
       <div className="flex items-center pl-2">
-        <Text text02 secondaryBody>
+        <Text as="p" text02 secondaryBody>
           Recent Chats
         </Text>
       </div>
 
-      {projectChats.length === 0 ? (
-        <Text text02 secondaryBody className="p-2">
+      {isLoadingProjectDetails && !currentProjectDetails ? (
+        <div className="flex flex-col gap-2">
+          <ChatSessionSkeleton />
+          <ChatSessionSkeleton />
+          <ChatSessionSkeleton />
+        </div>
+      ) : projectChats.length === 0 ? (
+        <Text as="p" text02 secondaryBody className="p-2">
           No chats yet.
         </Text>
       ) : (
@@ -76,7 +84,7 @@ export default function ProjectChatSessionList() {
                         if (assistant) {
                           return (
                             <div className="h-full pt-1">
-                              <AgentIcon agent={assistant} size={18} />
+                              <AgentAvatar agent={assistant} size={18} />
                             </div>
                           );
                         }
@@ -90,6 +98,7 @@ export default function ProjectChatSessionList() {
                     <div className="flex items-center gap-1 w-full justify-between">
                       <div className="flex items-center gap-1">
                         <Text
+                          as="p"
                           text03
                           mainUiBody
                           nowrap
@@ -122,7 +131,13 @@ export default function ProjectChatSessionList() {
                         />
                       </div>
                     </div>
-                    <Text text03 secondaryBody nowrap className="truncate">
+                    <Text
+                      as="p"
+                      text03
+                      secondaryBody
+                      nowrap
+                      className="truncate"
+                    >
                       Last message {formatRelativeTime(chat.time_updated)}
                     </Text>
                   </div>

@@ -5,38 +5,61 @@ import { OnyxApiClient } from "../utils/onyxApiClient";
 // --- Locator Helper Functions ---
 const getNameInput = (page: Page) => page.locator('input[name="name"]');
 const getDescriptionInput = (page: Page) =>
-  page.locator('input[name="description"]');
+  page.locator('textarea[name="description"]');
 const getInstructionsTextarea = (page: Page) =>
-  page.locator('textarea[name="system_prompt"]');
-const getAdvancedOptionsButton = (page: Page) =>
-  page.locator('button:has-text("Advanced Options")');
+  page.locator('textarea[name="instructions"]');
 const getReminderTextarea = (page: Page) =>
-  page.locator('textarea[name="task_prompt"]');
-const getDateTimeAwareCheckbox = (page: Page) =>
-  page.getByRole("checkbox", { name: /Date and Time Aware/i });
-const getKnowledgeCutoffInput = (page: Page) =>
-  page.locator('input[name="search_start_date"]');
+  page.locator('textarea[name="reminders"]');
 const getKnowledgeToggle = (page: Page) =>
-  page
-    .locator('div:has(> p:has-text("Knowledge"))')
-    .locator('button[role="switch"]');
-const getNumChunksInput = (page: Page) =>
-  page.locator('input[name="num_chunks"]');
-const getAiRelevanceCheckbox = (page: Page) =>
-  page.getByRole("checkbox", { name: /AI Relevance Filter/i });
+  page.locator('button[role="switch"][name="enable_knowledge"]');
+
+// Helper function to set date using InputDatePicker (sets to today's date)
+const setKnowledgeCutoffDate = async (page: Page) => {
+  // Find and click the date picker button within the Knowledge Cutoff Date section
+  const datePickerButton = page
+    .locator('label:has-text("Knowledge Cutoff Date")')
+    .locator("..")
+    .locator('button:has-text("Select Date"), button:has-text("/")');
+
+  await datePickerButton.click();
+
+  // Wait for the popover to open
+  await page.waitForSelector('[role="dialog"]', {
+    state: "visible",
+    timeout: 5000,
+  });
+
+  // Click the "Today" button to set to today's date
+  const todayButton = page
+    .locator('[role="dialog"]')
+    .getByRole("button", { name: "Today" })
+    .first();
+  await todayButton.click();
+
+  // The popover should close automatically after selection
+  await page.waitForSelector('[role="dialog"]', {
+    state: "hidden",
+    timeout: 5000,
+  });
+};
 const getStarterMessageInput = (page: Page, index: number = 0) =>
-  page.locator(`input[name="starter_messages.${index}.message"]`);
+  page.locator(`input[name="starter_messages.${index}"]`);
 const getCreateSubmitButton = (page: Page) =>
   page.locator('button[type="submit"]:has-text("Create")');
 const getUpdateSubmitButton = (page: Page) =>
-  page.locator('button[type="submit"]:has-text("Update")');
+  page.locator('button[type="submit"]:has-text("Save")');
+const getKnowledgeSourceSelect = (page: Page) =>
+  page
+    .locator('label:has-text("Knowledge Source")')
+    .locator('button[role="combobox"]')
+    .first();
 
 test.describe("Assistant Creation and Edit Verification", () => {
   // Configure this entire suite to run serially
   test.describe.configure({ mode: "serial" });
 
   test.describe("User Files Only", () => {
-    test("should create assistant with user files when no connectors exist", async ({
+    test("should create assistant with user files when no connectors exist @exclusive", async ({
       page,
     }: {
       page: Page;
@@ -49,20 +72,25 @@ test.describe("Assistant Creation and Edit Verification", () => {
         "Testing user file uploads without connectors";
       const assistantInstructions = "Help users with their documents.";
 
-      await page.goto("http://localhost:3000/assistants/new");
+      await page.goto("/chat/agents/create");
 
       // Fill in basic assistant details
       await getNameInput(page).fill(assistantName);
       await getDescriptionInput(page).fill(assistantDescription);
       await getInstructionsTextarea(page).fill(assistantInstructions);
 
-      // Verify Knowledge toggle is disabled (no connectors)
+      // Enable Knowledge toggle
       const knowledgeToggle = getKnowledgeToggle(page);
       await knowledgeToggle.scrollIntoViewIfNeeded();
-      await expect(knowledgeToggle).toBeDisabled();
       await expect(knowledgeToggle).toHaveAttribute("aria-checked", "false");
+      await knowledgeToggle.click();
 
-      // Verify "Add User Files" button is visible even without connectors
+      // Select "User Knowledge" from the knowledge source dropdown
+      const knowledgeSourceSelect = getKnowledgeSourceSelect(page);
+      await knowledgeSourceSelect.click();
+      await page.getByRole("option", { name: "User Knowledge" }).click();
+
+      // Verify "Add User Files" button is visible
       const addUserFilesButton = page.getByRole("button", {
         name: /add user files/i,
       });
@@ -122,7 +150,7 @@ test.describe("Assistant Creation and Edit Verification", () => {
       );
 
       // Navigate to a page to ensure session is fully established
-      await page.goto("http://localhost:3000/chat");
+      await page.goto("/chat");
       await page.waitForLoadState("networkidle");
 
       // Now login as a regular user to test the assistant creation
@@ -136,7 +164,6 @@ test.describe("Assistant Creation and Edit Verification", () => {
       const assistantReminder = "Initial reminder.";
       const assistantStarterMessage = "Initial starter message?";
       const knowledgeCutoffDate = "2023-01-01";
-      const numChunks = "5";
 
       // --- Edited Values ---
       const editedAssistantName = `Edited Assistant ${Date.now()}`;
@@ -145,31 +172,20 @@ test.describe("Assistant Creation and Edit Verification", () => {
       const editedAssistantReminder = "Edited reminder.";
       const editedAssistantStarterMessage = "Edited starter message?";
       const editedKnowledgeCutoffDate = "2024-01-01";
-      const editedNumChunks = "15";
 
       // Navigate to the assistant creation page
-      await page.goto("http://localhost:3000/assistants/new");
+      await page.goto("/chat/agents/create");
 
       // --- Fill in Initial Assistant Details ---
       await getNameInput(page).fill(assistantName);
       await getDescriptionInput(page).fill(assistantDescription);
       await getInstructionsTextarea(page).fill(assistantInstructions);
 
-      // --- Open Advanced Options ---
-      const advancedOptionsButton = getAdvancedOptionsButton(page);
-      await advancedOptionsButton.scrollIntoViewIfNeeded();
-      await advancedOptionsButton.click();
-
-      // --- Fill Advanced Fields ---
-
       // Reminder
       await getReminderTextarea(page).fill(assistantReminder);
 
-      // Date/Time Aware (Enable)
-      await getDateTimeAwareCheckbox(page).click();
-
       // Knowledge Cutoff Date
-      await getKnowledgeCutoffInput(page).fill(knowledgeCutoffDate);
+      await setKnowledgeCutoffDate(page);
 
       // Enable Knowledge toggle (should now be enabled due to connector)
       const knowledgeToggle = getKnowledgeToggle(page);
@@ -179,15 +195,14 @@ test.describe("Assistant Creation and Edit Verification", () => {
       await expect(knowledgeToggle).not.toBeDisabled();
       await knowledgeToggle.click();
 
+      // Select "Team Knowledge" from the knowledge source dropdown
+      const knowledgeSourceSelect = getKnowledgeSourceSelect(page);
+      await knowledgeSourceSelect.click();
+      await page.getByRole("option", { name: "Team Knowledge" }).click();
+
       // Select the document set created in beforeAll
       // Document sets are rendered as clickable cards, not a dropdown
       await page.getByTestId(`document-set-card-${documentSetId}`).click();
-
-      // Num Chunks (should work now that Knowledge is enabled)
-      await getNumChunksInput(page).fill(numChunks);
-
-      // AI Relevance Filter (Enable)
-      await getAiRelevanceCheckbox(page).click();
 
       // Starter Message
       await getStarterMessageInput(page).fill(assistantStarterMessage);
@@ -204,8 +219,8 @@ test.describe("Assistant Creation and Edit Verification", () => {
       expect(assistantId).not.toBeNull();
 
       // Navigate directly to the edit page
-      await page.goto(`http://localhost:3000/assistants/edit/${assistantId}`);
-      await page.waitForURL(`**/assistants/edit/${assistantId}`);
+      await page.goto(`/chat/agents/edit/${assistantId}`);
+      await page.waitForURL(`**/chat/agents/edit/${assistantId}`);
 
       // Verify basic fields
       await expect(getNameInput(page)).toHaveValue(assistantName);
@@ -214,17 +229,8 @@ test.describe("Assistant Creation and Edit Verification", () => {
         assistantInstructions
       );
 
-      // Open Advanced Options
-      const advancedOptionsButton1 = getAdvancedOptionsButton(page);
-      await advancedOptionsButton1.scrollIntoViewIfNeeded();
-      await advancedOptionsButton1.click();
-
       // Verify advanced fields
       await expect(getReminderTextarea(page)).toHaveValue(assistantReminder);
-      await expect(getDateTimeAwareCheckbox(page)).toHaveAttribute(
-        "aria-checked",
-        "true"
-      );
       // Knowledge toggle should be enabled since we have a connector
       await expect(getKnowledgeToggle(page)).toHaveAttribute(
         "aria-checked",
@@ -235,14 +241,7 @@ test.describe("Assistant Creation and Edit Verification", () => {
       await expect(
         page.getByTestId(`document-set-card-${documentSetId}`)
       ).toBeVisible();
-      await expect(getKnowledgeCutoffInput(page)).toHaveValue(
-        knowledgeCutoffDate
-      );
-      await expect(getNumChunksInput(page)).toHaveValue(numChunks);
-      await expect(getAiRelevanceCheckbox(page)).toHaveAttribute(
-        "aria-checked",
-        "true"
-      );
+      // Knowledge cutoff date is set to today's date
       await expect(getStarterMessageInput(page)).toHaveValue(
         assistantStarterMessage
       );
@@ -252,10 +251,7 @@ test.describe("Assistant Creation and Edit Verification", () => {
       await getDescriptionInput(page).fill(editedAssistantDescription);
       await getInstructionsTextarea(page).fill(editedAssistantInstructions);
       await getReminderTextarea(page).fill(editedAssistantReminder);
-      await getDateTimeAwareCheckbox(page).click(); // Disable
-      await getKnowledgeCutoffInput(page).fill(editedKnowledgeCutoffDate);
-      await getNumChunksInput(page).fill(editedNumChunks);
-      await getAiRelevanceCheckbox(page).click(); // Disable
+      await setKnowledgeCutoffDate(page);
       await getStarterMessageInput(page).fill(editedAssistantStarterMessage);
 
       // Submit the edit form
@@ -266,8 +262,8 @@ test.describe("Assistant Creation and Edit Verification", () => {
       expect(page.url()).toContain(`assistantId=${assistantId}`);
 
       // --- Navigate to Edit Page Again and Verify Edited Values ---
-      await page.goto(`http://localhost:3000/assistants/edit/${assistantId}`);
-      await page.waitForURL(`**/assistants/edit/${assistantId}`);
+      await page.goto(`/chat/agents/edit/${assistantId}`);
+      await page.waitForURL(`**/chat/agents/edit/${assistantId}`);
 
       // Verify basic fields
       await expect(getNameInput(page)).toHaveValue(editedAssistantName);
@@ -278,18 +274,9 @@ test.describe("Assistant Creation and Edit Verification", () => {
         editedAssistantInstructions
       );
 
-      // Open Advanced Options
-      const advancedOptionsButton2 = getAdvancedOptionsButton(page);
-      await advancedOptionsButton2.scrollIntoViewIfNeeded();
-      await advancedOptionsButton2.click();
-
       // Verify advanced fields
       await expect(getReminderTextarea(page)).toHaveValue(
         editedAssistantReminder
-      );
-      await expect(getDateTimeAwareCheckbox(page)).toHaveAttribute(
-        "aria-checked",
-        "false"
       );
       await expect(getKnowledgeToggle(page)).toHaveAttribute(
         "aria-checked",
@@ -299,14 +286,7 @@ test.describe("Assistant Creation and Edit Verification", () => {
       await expect(
         page.getByTestId(`document-set-card-${documentSetId}`)
       ).toBeVisible();
-      await expect(getKnowledgeCutoffInput(page)).toHaveValue(
-        editedKnowledgeCutoffDate
-      );
-      await expect(getNumChunksInput(page)).toHaveValue(editedNumChunks);
-      await expect(getAiRelevanceCheckbox(page)).toHaveAttribute(
-        "aria-checked",
-        "false"
-      );
+      // Knowledge cutoff date is set to today's date
       await expect(getStarterMessageInput(page)).toHaveValue(
         editedAssistantStarterMessage
       );

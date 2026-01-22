@@ -7,26 +7,18 @@ import {
   moveChatSession as moveChatSessionService,
   removeChatSessionFromProject as removeChatSessionFromProjectService,
 } from "@/app/chat/projects/projectsService";
-import {
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
-  PopoverMenu,
-} from "@/components/ui/popover";
+import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { FiMoreHorizontal } from "react-icons/fi";
-import { useChatContext } from "@/refresh-components/contexts/ChatContext";
+import useChatSessions from "@/hooks/useChatSessions";
 import { useCallback, useState, useMemo } from "react";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
 // PopoverMenu already imported above
-import MenuButton from "@/refresh-components/buttons/MenuButton";
-import SvgShare from "@/icons/share";
-import SvgFolderIn from "@/icons/folder-in";
-import SvgTrash from "@/icons/trash";
-import SvgFolder from "@/icons/folder";
 import { cn, noProp } from "@/lib/utils";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Button from "@/refresh-components/buttons/Button";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
+import LineItem from "@/refresh-components/buttons/LineItem";
+import { SvgFolder, SvgFolderIn, SvgShare, SvgTrash } from "@opal/icons";
 // Constants
 const DEFAULT_PERSONA_ID = 0;
 const LS_HIDE_MOVE_CUSTOM_AGENT_MODAL_KEY = "onyx:hideMoveCustomAgentModal";
@@ -60,7 +52,7 @@ export function ChatSessionMorePopup({
 }: ChatSessionMorePopupProps) {
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const { refreshChatSessions } = useChatContext();
+  const { refreshChatSessions } = useChatSessions();
   const { fetchProjects, projects } = useProjectsContext();
 
   const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
@@ -145,23 +137,23 @@ export function ChatSessionMorePopup({
     if (!showMoveOptions) {
       return [
         showShareModal && (
-          <MenuButton
+          <LineItem
             key="share"
             icon={SvgShare}
             onClick={noProp(() => showShareModal(chatSession))}
           >
             Share
-          </MenuButton>
+          </LineItem>
         ),
-        <MenuButton
+        <LineItem
           key="move"
           icon={SvgFolderIn}
           onClick={noProp(() => setShowMoveOptions(true))}
         >
           Move to Project
-        </MenuButton>,
+        </LineItem>,
         projectId && (
-          <MenuButton
+          <LineItem
             key="remove"
             icon={SvgFolder}
             onClick={noProp(() => handleRemoveChatSessionFromProject())}
@@ -169,17 +161,17 @@ export function ChatSessionMorePopup({
             {`Remove from ${
               projects.find((p) => p.id === projectId)?.name ?? "Project"
             }`}
-          </MenuButton>
+          </LineItem>
         ),
         null,
-        <MenuButton
+        <LineItem
           key="delete"
           icon={SvgTrash}
           onClick={noProp(() => setIsDeleteModalOpen(true))}
           danger
         >
           Delete
-        </MenuButton>,
+        </LineItem>,
       ];
     }
     return [
@@ -191,7 +183,7 @@ export function ChatSessionMorePopup({
       ...filteredProjects
         .filter((candidate) => candidate.id !== projectId)
         .map((target) => (
-          <MenuButton
+          <LineItem
             key={target.id}
             icon={SvgFolder}
             onClick={noProp(() =>
@@ -199,7 +191,7 @@ export function ChatSessionMorePopup({
             )}
           >
             {target.name}
-          </MenuButton>
+          </LineItem>
         )),
     ];
   }, [
@@ -219,7 +211,7 @@ export function ChatSessionMorePopup({
     <div>
       <div className="-my-1">
         <Popover open={popoverOpen} onOpenChange={handlePopoverOpenChange}>
-          <PopoverTrigger
+          <Popover.Trigger
             asChild
             onClick={(event) => {
               event.preventDefault();
@@ -237,15 +229,15 @@ export function ChatSessionMorePopup({
             >
               <FiMoreHorizontal size={iconSize} />
             </div>
-          </PopoverTrigger>
-          <PopoverContent
+          </Popover.Trigger>
+          <Popover.Content
             align="end"
             side="right"
             avoidCollisions
             sideOffset={8}
           >
             <PopoverMenu>{popoverItems}</PopoverMenu>
-          </PopoverContent>
+          </Popover.Content>
         </Popover>
       </div>
       {isDeleteModalOpen && (

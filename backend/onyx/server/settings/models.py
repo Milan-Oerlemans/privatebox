@@ -15,9 +15,10 @@ class PageType(str, Enum):
 
 
 class ApplicationStatus(str, Enum):
-    PAYMENT_REMINDER = "payment_reminder"
-    GATED_ACCESS = "gated_access"
     ACTIVE = "active"
+    PAYMENT_REMINDER = "payment_reminder"
+    GRACE_PERIOD = "grace_period"
+    GATED_ACCESS = "gated_access"
 
 
 class Notification(BaseModel):
@@ -26,6 +27,8 @@ class Notification(BaseModel):
     dismissed: bool
     last_shown: datetime
     first_shown: datetime
+    title: str
+    description: str | None = None
     additional_data: dict | None = None
 
     @classmethod
@@ -36,6 +39,8 @@ class Notification(BaseModel):
             dismissed=notif.dismissed,
             last_shown=notif.last_shown,
             first_shown=notif.first_shown,
+            title=notif.title,
+            description=notif.description,
             additional_data=notif.additional_data,
         )
 
