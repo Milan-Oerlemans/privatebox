@@ -61,3 +61,6 @@ deployment/docker_compose/env.txt
 
 # plans
 plans/
+deployment/data/certbot/conf/
+deployment/letsencrypt-backup/
+deployment/letsencrypt-backup/
