@@ -67,3 +67,7 @@ deployment/letsencrypt-backup/
 deployment/data/certbot/conf/renewal/chat.privatebox.co.za.conf
 
 deployment/data/certbot/conf/renewal/dev.privatebox.co.za.conf
+deployment/data/certbot/conf/renewal/chat.privatebox.co.za.conf
+deployment/data/certbot/conf/renewal/chat.privatebox.co.za.conf
+deployment/data/certbot/conf/renewal/dev.privatebox.co.za.conf
+deployment/data/certbot/conf/renewal/dev.privatebox.co.za.conf
