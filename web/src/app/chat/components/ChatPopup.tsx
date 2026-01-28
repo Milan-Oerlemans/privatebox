@@ -76,7 +76,7 @@ export function ChatPopup() {
       <Modal.Content width="sm" height="lg">
         <Modal.Header
           icon={headerIcon}
-          title={popupTitle || "Welcome to Onyx!"}
+          title={popupTitle || "Welcome to PrivateBox!"}
         />
         <Modal.Body>
           <div className="overflow-y-auto text-left">
