@@ -1,0 +1,36 @@
+services:
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    ports:
+      - "80:8080"
+    environment:
+      # REQUIRED: Tells the app its own valid LAN address
+      - 'WEBUI_URL=http://privatebox.local:80'
+      
+      # REQUIRED: Allows the browser to make requests from that LAN IP
+      - 'CORS_ALLOW_ORIGIN=*'
+      
+      # OPTIONAL: Disables strict origin checking if the above don't work (Dev only)
+      - 'ENABLE_CSRF_PROTECTION=false'
+      # --- Connection Settings ---
+      - 'OPENAI_API_BASE_URL=http://host.docker.internal:12001/v1'
+      - 'OPENAI_API_KEY=vllm-test' # vLLM usually ignores this, but it's required by the UI
+      
+      # --- Dev-Oriented Settings ---
+      - 'WEBUI_AUTH=false'         # Disables login for instant local testing
+      - 'WEBUI_NAME=Privatebox Dev UI'   # Custom branding for your local lab
+      - 'ENABLE_SIGNUP=false'      # Prevent extra account creation
+      
+      # --- Logging & Performance ---
+      - 'GLOBAL_LOG_LEVEL=DEBUG'   # See exactly what's happening in the backend
+      - 'AIOHTTP_CLIENT_TIMEOUT_MODEL_LIST=30' # Extra time for vLLM to respond if model is loading
+    
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # Vital for reaching vLLM on the host's localhost
+    
+    volumes:
+      - open-webui-data:/app/backend/data
+    restart: always
+
+volumes:
+  open-webui-data:

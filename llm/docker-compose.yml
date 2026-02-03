@@ -1,0 +1,51 @@
+services:
+  vllm-blackwell:
+    image: nvcr.io/nvidia/vllm:26.01-py3
+    container_name: vllm_spark
+    runtime: nvidia
+    restart: unless-stopped
+    
+    # Critical for high-performance inference
+    ipc: host
+    network_mode: host
+
+    # Load all variables from the .env file automatically
+    env_file:
+      - .env
+    
+    environment:
+      
+      # Map our HF_TOKEN to the variable vLLM actually looks for:
+      - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN}
+      
+      # Fixed Engine Settings (Keep these hardcoded as they rarely change for this specific container)
+      - VLLM_USE_V1=1
+      - VLLM_ATTENTION_BACKEND=FLASHINFER
+      - NVIDIA_VISIBLE_DEVICES=all
+
+    volumes:
+      # Main startup script
+      - ./llm-scripts/start-vllm.sh:/start-vllm.sh:ro
+      
+      # Script folder (allows you to drop in custom scripts effortlessly)
+      - ./llm-scripts:/scripts:ro
+      
+      # Cache persistence
+      - ~/.cache/huggingface:/root/.cache/huggingface
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${PORT:-12001}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+    entrypoint: ["/bin/bash", "/start-vllm.sh"]
