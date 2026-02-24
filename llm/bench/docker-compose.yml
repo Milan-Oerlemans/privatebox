@@ -1,0 +1,15 @@
+services:
+  guidellm:
+    image: ghcr.io/vllm-project/guidellm:latest
+    platform: linux/amd64  # Forces Docker to run the x86_64 image on your ARM host
+    container_name: vllm_bench
+    network_mode: host
+    stdin_open: true
+    tty: true
+    volumes:
+      - ./results:/results:rw
+    environment:
+      - GUIDELLM_TARGET=http://localhost:${PORT:-12001}
+      - GUIDELLM_PROFILE=sweep
+      - GUIDELLM_MAX_SECONDS=30
+      - GUIDELLM_DATA=prompt_tokens=256,output_tokens=128

@@ -6,10 +6,8 @@ set -e
 # --- PRODUCTION SAFEGUARDS ---
 
 # 1. Sanitize the MODEL_NAME variable.
-DEFAULT_MODEL="nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4"
-MODEL_NAME="${MODEL_NAME:-$DEFAULT_MODEL}"
-MODEL_NAME=$(echo "$MODEL_NAME" | xargs)
 
+MODEL_NAME="nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4"
 echo "Starting VLLM on NVIDIA DGX Spark (Grace Blackwell GB10)..."
 echo "Target Model: '$MODEL_NAME'"
 
@@ -19,7 +17,7 @@ SERVE_PORT="${PORT:-8000}"
 # 3. Memory Management
 # 128GB Unified Memory is massive. 
 # We reserve 95% for vLLM to maximize the KV cache size for high concurrency.
-MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.95}"
+MEMORY_UTILIZATION="0.4"
 echo "Memory Utilization Limit: $MEMORY_UTILIZATION"
 
 # 4. Tool & Reasoning Config
@@ -60,7 +58,7 @@ exec python3 -m vllm.entrypoints.openai.api_server \
     --served-model-name model \
     --trust-remote-code \
     --kv-cache-dtype fp8 \
-    --max-model-len 131072 \
+    --max-model-len 32000 \
     --max-num-seqs 128 \
     --tensor-parallel-size 1 \
     --gpu-memory-utilization "$MEMORY_UTILIZATION" \
@@ -68,7 +66,7 @@ exec python3 -m vllm.entrypoints.openai.api_server \
     --max-num-batched-tokens 8192 \
     --enable-prefix-caching \
     --enable-auto-tool-choice \
-    --tool-call-parser "$TOOL_PARSER" \
+    --tool-call-parser qwen3_coder \
     --reasoning-parser-plugin nano_v3_reasoning_parser.py \
     --reasoning-parser nano_v3 \
     --host 0.0.0.0 \

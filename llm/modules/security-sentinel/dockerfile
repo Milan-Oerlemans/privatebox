@@ -1,0 +1,27 @@
+# Use NVIDIA NGC PyTorch Image - Best for DGX OS
+# 24.01 is highly stable for Grace Blackwell systems
+FROM nvcr.io/nvidia/pytorch:26.01-py3
+
+# Avoid interaction during package installs
+ENV DEBIAN_FRONTEND=noninteractive
+
+WORKDIR /
+
+# Copy requirements and install
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# PRE-DOWNLOAD MODEL: This is crucial for DGX systems to avoid 
+# network timeouts or massive downloads during container startup.
+RUN python3 -c "from transformers import AutoTokenizer, AutoModelForSequenceClassification; \
+    AutoTokenizer.from_pretrained('qualifire/prompt-injection-jailbreak-sentinel-v2'); \
+    AutoModelForSequenceClassification.from_pretrained('qualifire/prompt-injection-jailbreak-sentinel-v2')"
+
+# Copy application code
+COPY app.py .
+
+# Expose FastAPI port
+EXPOSE 8001
+
+# Run with Uvicorn
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "12002", "--workers", "1"]

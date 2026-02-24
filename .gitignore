@@ -71,3 +71,5 @@ deployment/data/certbot/conf/renewal/chat.privatebox.co.za.conf
 deployment/data/certbot/conf/renewal/chat.privatebox.co.za.conf
 deployment/data/certbot/conf/renewal/dev.privatebox.co.za.conf
 deployment/data/certbot/conf/renewal/dev.privatebox.co.za.conf
+llm/tests/venv/
+llm/bench/venv/

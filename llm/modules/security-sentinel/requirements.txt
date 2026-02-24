@@ -1,0 +1,10 @@
+# Core AI dependencies (optimized for DGX)
+transformers
+accelerate
+torch
+torchvision
+
+# Web Server
+fastapi
+uvicorn
+pydantic

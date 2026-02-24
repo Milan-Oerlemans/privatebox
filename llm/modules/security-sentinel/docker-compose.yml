@@ -1,0 +1,18 @@
+services:
+  # The Siloed Classifier Service (Standalone)
+  security-sentinel:
+    build: .
+    container_name: security-sentinel
+    ports:
+      - "12002:12002"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              # Set count to 1 to use a single GPU on the DGX
+              count: 1
+              capabilities: [gpu]
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    restart: unless-stopped
