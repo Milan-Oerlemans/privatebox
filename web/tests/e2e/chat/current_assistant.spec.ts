@@ -1,7 +1,10 @@
-import { test, expect } from "@chromatic-com/playwright";
-import { dragElementAbove, dragElementBelow } from "../utils/dragUtils";
-import { loginAsRandomUser } from "../utils/auth";
-import { createAssistant, pinAssistantByName } from "../utils/assistantUtils";
+import { test, expect } from "@playwright/test";
+import { dragElementAbove, dragElementBelow } from "@tests/e2e/utils/dragUtils";
+import { loginAsRandomUser } from "@tests/e2e/utils/auth";
+import {
+  createAssistant,
+  pinAssistantByName,
+} from "@tests/e2e/utils/assistantUtils";
 
 // TODO (chris): figure out why this test is flakey
 test.skip("Assistant Drag and Drop", async ({ page }) => {
@@ -9,7 +12,7 @@ test.skip("Assistant Drag and Drop", async ({ page }) => {
   await loginAsRandomUser(page);
 
   // Navigate to the chat page
-  await page.goto("/chat");
+  await page.goto("/app");
 
   // Ensure at least two assistants exist for drag-and-drop
   const ts = Date.now();

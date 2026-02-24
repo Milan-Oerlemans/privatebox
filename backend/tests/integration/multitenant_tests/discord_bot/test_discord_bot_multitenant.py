@@ -95,7 +95,7 @@ class TestGuildDataIsolation:
     """Tests for guild data isolation between tenants via API."""
 
     def test_tenant_cannot_see_other_tenant_guilds(
-        self, reset_multitenant: None
+        self, reset_multitenant: None  # noqa: ARG002
     ) -> None:
         """Guilds created in tenant 1 are not visible from tenant 2.
 
@@ -106,13 +106,13 @@ class TestGuildDataIsolation:
 
         # Create admin user for tenant 1
         admin_user1: DATestUser = UserManager.create(
-            email=f"discord_admin1+{unique}@example.com",
+            email=f"discord_admin1_{unique}@example.com",
         )
         assert UserManager.is_role(admin_user1, UserRole.ADMIN)
 
         # Create admin user for tenant 2
         admin_user2: DATestUser = UserManager.create(
-            email=f"discord_admin2+{unique}@example.com",
+            email=f"discord_admin2_{unique}@example.com",
         )
         assert UserManager.is_role(admin_user2, UserRole.ADMIN)
 
@@ -158,7 +158,9 @@ class TestGuildDataIsolation:
                 headers=admin_user1.headers,
             )
 
-    def test_guild_list_returns_only_own_tenant(self, reset_multitenant: None) -> None:
+    def test_guild_list_returns_only_own_tenant(
+        self, reset_multitenant: None  # noqa: ARG002
+    ) -> None:
         """List guilds returns exactly the guilds for that tenant.
 
         Creates 1 guild in each tenant, registers them with different data,
@@ -168,10 +170,10 @@ class TestGuildDataIsolation:
 
         # Create admin users for two tenants
         admin_user1: DATestUser = UserManager.create(
-            email=f"discord_list1+{unique}@example.com",
+            email=f"discord_list1_{unique}@example.com",
         )
         admin_user2: DATestUser = UserManager.create(
-            email=f"discord_list2+{unique}@example.com",
+            email=f"discord_list2_{unique}@example.com",
         )
 
         # Create 1 guild in tenant 1
@@ -338,7 +340,7 @@ class TestGuildAccessIsolation:
     """Tests for guild access isolation between tenants."""
 
     def test_tenant_cannot_access_other_tenant_guild(
-        self, reset_multitenant: None
+        self, reset_multitenant: None  # noqa: ARG002
     ) -> None:
         """Tenant 2 cannot access or modify tenant 1's guild by ID.
 
@@ -348,10 +350,10 @@ class TestGuildAccessIsolation:
 
         # Create admin users for two tenants
         admin_user1: DATestUser = UserManager.create(
-            email=f"discord_access1+{unique}@example.com",
+            email=f"discord_access1_{unique}@example.com",
         )
         admin_user2: DATestUser = UserManager.create(
-            email=f"discord_access2+{unique}@example.com",
+            email=f"discord_access2_{unique}@example.com",
         )
 
         # Create a guild in tenant 1

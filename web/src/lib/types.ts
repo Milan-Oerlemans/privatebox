@@ -30,13 +30,21 @@ interface UserPreferences {
   temperature_override_enabled: boolean;
   theme_preference: ThemePreference | null;
   chat_background: string | null;
+  default_app_mode: "AUTO" | "CHAT" | "SEARCH";
+}
+
+export interface MemoryItem {
+  id: number | null;
+  content: string;
 }
 
 export interface UserPersonalization {
   name: string;
   role: string;
-  memories: string[];
+  memories: MemoryItem[];
   use_memories: boolean;
+  enable_memory_tool: boolean;
+  user_preferences: string;
 }
 
 export enum UserRole {
@@ -144,6 +152,7 @@ export type ValidStatuses =
 export type TaskStatus = "PENDING" | "STARTED" | "SUCCESS" | "FAILURE";
 export type Feedback = "like" | "dislike" | "mixed";
 export type AccessType = "public" | "private" | "sync";
+export type ProcessingMode = "REGULAR" | "FILE_SYSTEM";
 export type SessionType = "Chat" | "Search" | "Slack";
 
 export interface DocumentBoostStatus {
@@ -291,6 +300,7 @@ export interface OAuthConfluenceFinalizeResponse {
 export interface CCPairBasicInfo {
   has_successful_run: boolean;
   source: ValidSources;
+  status: ConnectorCredentialPairStatus;
 }
 
 export type ConnectorSummary = {
@@ -507,6 +517,9 @@ export enum ValidSources {
   Bitbucket = "bitbucket",
   TestRail = "testrail",
 
+  // Craft-specific sources
+  CraftFile = "craft_file",
+
   // Federated Connectors
   FederatedSlack = "federated_slack",
 }
@@ -541,6 +554,7 @@ export type ConfigurableSources = Exclude<
   | ValidSources.IngestionApi
   | ValidSources.FederatedSlack // is part of ValiedSources.Slack
   | ValidSources.UserFile
+  | ValidSources.CraftFile // User Library - managed through dedicated UI
 >;
 
 export const oauthSupportedSources: ConfigurableSources[] = [

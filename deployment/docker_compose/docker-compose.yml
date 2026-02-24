@@ -40,6 +40,8 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
+      args:
+        - ENABLE_CRAFT=${ENABLE_CRAFT:-false}
     command: >
       /bin/sh -c "alembic upgrade head &&
       echo \"Starting Onyx Api Server\" &&
@@ -49,11 +51,17 @@ services:
       - path: .env
         required: false
     depends_on:
-      - relational_db
-      - index
-      # - cache
-      - inference_model_server
-      - minio
+      relational_db:
+        condition: service_started
+      index:
+        condition: service_started
+      cache:
+        condition: service_started
+      inference_model_server:
+        condition: service_started
+      minio:
+        condition: service_started
+        required: false
     restart: unless-stopped
     # DEV: To expose ports, either:
     # 1. Use docker-compose.dev.yml: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait
@@ -63,13 +71,24 @@ services:
     environment:
       # Auth Settings
       - AUTH_TYPE=${AUTH_TYPE:-basic}
+      - FILE_STORE_BACKEND=${FILE_STORE_BACKEND:-s3}
       - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
       - VESPA_HOST=${VESPA_HOST:-index}
+      - OPENSEARCH_HOST=${OPENSEARCH_HOST:-opensearch}
+      - OPENSEARCH_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!}
+      - ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=${OPENSEARCH_FOR_ONYX_ENABLED:-false}
       - REDIS_HOST=${REDIS_HOST:-cache}
       - MODEL_SERVER_HOST=${MODEL_SERVER_HOST:-inference_model_server}
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
       - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:-minioadmin}
       - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}
+      # Onyx Craft configuration (disabled by default, set ENABLE_CRAFT=true in .env to enable)
+      # Use --include-craft with install script, or manually set in .env file
+      - ENABLE_CRAFT=${ENABLE_CRAFT:-false}
+      - OUTPUTS_TEMPLATE_PATH=${OUTPUTS_TEMPLATE_PATH:-/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/outputs}
+      - VENV_TEMPLATE_PATH=${VENV_TEMPLATE_PATH:-/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/venv}
+      - WEB_TEMPLATE_PATH=${WEB_TEMPLATE_PATH:-/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/outputs/web}
+      - PERSISTENT_DOCUMENT_STORAGE_PATH=${PERSISTENT_DOCUMENT_STORAGE_PATH:-/app/file-system}
     # PRODUCTION: Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
     #   - ./bundle.pem:/app/bundle.pem:ro
@@ -95,14 +114,21 @@ services:
     # Optional, only for debugging purposes
     volumes:
       - api_server_logs:/var/log/onyx
+      # Shared volume for persistent document storage (Craft file-system mode)
+      - file-system:/app/file-system
 
   background:
     image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
     build:
       context: ../../backend
       dockerfile: Dockerfile
+      args:
+        - ENABLE_CRAFT=${ENABLE_CRAFT:-false}
     command: >
       /bin/sh -c "
+      if [ -f /app/scripts/setup_craft_templates.sh ]; then
+        /app/scripts/setup_craft_templates.sh;
+      fi &&
       if [ -f /etc/ssl/certs/custom-ca.crt ]; then
         update-ca-certificates;
       fi &&
@@ -119,14 +145,29 @@ services:
     restart: unless-stopped
     environment:
       - USE_LIGHTWEIGHT_BACKGROUND_WORKER=${USE_LIGHTWEIGHT_BACKGROUND_WORKER:-true}
+      - FILE_STORE_BACKEND=${FILE_STORE_BACKEND:-s3}
       - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
       - VESPA_HOST=${VESPA_HOST:-index}
+      - OPENSEARCH_HOST=${OPENSEARCH_HOST:-opensearch}
+      - OPENSEARCH_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!}
+      - ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=${OPENSEARCH_FOR_ONYX_ENABLED:-false}
       - REDIS_HOST=${REDIS_HOST:-cache}
       - MODEL_SERVER_HOST=${MODEL_SERVER_HOST:-inference_model_server}
       - INDEXING_MODEL_SERVER_HOST=${INDEXING_MODEL_SERVER_HOST:-indexing_model_server}
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
       - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:-minioadmin}
       - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
+      - DISCORD_BOT_INVOKE_CHAR=${DISCORD_BOT_INVOKE_CHAR:-!}
+      # API Server connection for Discord bot message processing
+      - API_SERVER_PROTOCOL=${API_SERVER_PROTOCOL:-http}
+      - API_SERVER_HOST=${API_SERVER_HOST:-api_server}
+      # Onyx Craft configuration (set up automatically on container startup)
+      - ENABLE_CRAFT=${ENABLE_CRAFT:-false}
+      - OUTPUTS_TEMPLATE_PATH=${OUTPUTS_TEMPLATE_PATH:-/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/outputs}
+      - VENV_TEMPLATE_PATH=${VENV_TEMPLATE_PATH:-/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/venv}
+      - WEB_TEMPLATE_PATH=${WEB_TEMPLATE_PATH:-/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/outputs/web}
+      - PERSISTENT_DOCUMENT_STORAGE_PATH=${PERSISTENT_DOCUMENT_STORAGE_PATH:-/app/file-system}
     # PRODUCTION: Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
     #   - ./bundle.pem:/app/bundle.pem:ro
@@ -135,6 +176,8 @@ services:
     # Optional, only for debugging purposes
     volumes:
       - background_logs:/var/log/onyx
+      # Shared volume for persistent document storage (Craft file-system mode)
+      - file-system:/app/file-system
     logging:
       driver: json-file
       options:
@@ -156,7 +199,6 @@ services:
       dockerfile: Dockerfile
       args:
         - NEXT_PUBLIC_DISABLE_LOGOUT=${NEXT_PUBLIC_DISABLE_LOGOUT:-}
-        - NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN=${NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN:-}
         - NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED=${NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED:-}
         # Enterprise Edition only
         - NEXT_PUBLIC_THEME=${NEXT_PUBLIC_THEME:-}
@@ -365,6 +407,45 @@ services:
         max-size: "50m"
         max-file: "6"
 
+  opensearch:
+    image: opensearchproject/opensearch:3.4.0
+    restart: unless-stopped
+    # Controls whether this service runs. In order to enable it, add
+    # opensearch-enabled to COMPOSE_PROFILES in the environment for this
+    # docker-compose.
+    profiles: ["opensearch-enabled"]
+    environment:
+      # We need discovery.type=single-node so that OpenSearch doesn't try
+      # forming a cluster and waiting for other nodes to become live.
+      - discovery.type=single-node
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!}
+      # This and the JVM config below come from the example in https://docs.opensearch.org/latest/install-and-configure/install-opensearch/docker/
+      # We do this to avoid unstable performance from page swaps.
+      - bootstrap.memory_lock=true # Disable JVM heap memory swapping.
+      # Java heap should be ~50% of memory limit. For now we assume a limit of
+      # 2g although in practice the container can request more than this.
+      # See https://opster.com/guides/opensearch/opensearch-basics/opensearch-heap-size-usage-and-jvm-garbage-collection/
+      # Xms is the starting size, Xmx is the maximum size. These should be the
+      # same.
+      - "OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g"
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    # These come from the example in https://docs.opensearch.org/latest/install-and-configure/install-opensearch/docker/
+    ulimits:
+      # Similarly to bootstrap.memory_lock, we don't want to impose limits on
+      # how much memory a process can lock from being swapped.
+      memlock:
+        soft: -1 # Set memlock to unlimited (no soft or hard limit).
+        hard: -1
+      nofile:
+        soft: 65536 # Maximum number of open files for the opensearch user - set to at least 65536.
+        hard: 65536
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+
   nginx:
     image: nginx:1.25.5-alpine
     restart: unless-stopped
@@ -427,6 +508,7 @@ services:
 
   minio:
     image: minio/minio:RELEASE.2025-07-23T15-54-02Z-cpuv1
+    profiles: ["s3-filestore"]
     restart: unless-stopped
     # DEV: To expose ports, either:
     # 1. Use docker-compose.dev.yml: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait
@@ -505,3 +587,7 @@ volumes:
   # mcp_server_logs:
   inference_model_server_logs:
   indexing_model_server_logs:
+  # Shared volume for persistent document storage (Craft file-system mode)
+  file-system:
+  # Persistent data for OpenSearch.
+  opensearch-data:

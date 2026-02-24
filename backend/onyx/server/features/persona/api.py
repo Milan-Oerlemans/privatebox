@@ -14,6 +14,7 @@ from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_limited_user
 from onyx.auth.users import current_user
+from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import PUBLIC_API_TAGS
@@ -74,6 +75,44 @@ def _validate_user_knowledge_enabled(
             )
 
 
+def _validate_vector_db_knowledge(
+    persona_upsert_request: PersonaUpsertRequest,
+) -> None:
+    """Reject connector-sourced knowledge types when vector DB is disabled.
+
+    document_sets, hierarchy_nodes, and attached_documents all depend on
+    the vector DB for search filtering. user_files are still allowed because
+    they use the FileReaderTool path instead.
+    """
+    if not DISABLE_VECTOR_DB:
+        return
+
+    if persona_upsert_request.document_set_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Cannot attach document sets to an assistant when "
+                "the vector database is disabled (DISABLE_VECTOR_DB is set)."
+            ),
+        )
+    if persona_upsert_request.hierarchy_node_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Cannot attach hierarchy nodes to an assistant when "
+                "the vector database is disabled (DISABLE_VECTOR_DB is set)."
+            ),
+        )
+    if persona_upsert_request.document_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Cannot attach documents to an assistant when "
+                "the vector database is disabled (DISABLE_VECTOR_DB is set)."
+            ),
+        )
+
+
 admin_router = APIRouter(prefix="/admin/persona")
 basic_router = APIRouter(prefix="/persona")
 
@@ -99,7 +138,7 @@ class IsDefaultRequest(BaseModel):
 def patch_persona_visibility(
     persona_id: int,
     is_visible_request: IsVisibleRequest,
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     update_persona_visibility(
@@ -114,7 +153,7 @@ def patch_persona_visibility(
 def patch_user_persona_public_status(
     persona_id: int,
     is_public_request: IsPublicRequest,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     try:
@@ -133,7 +172,7 @@ def patch_user_persona_public_status(
 def patch_persona_default_status(
     persona_id: int,
     is_default_request: IsDefaultRequest,
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     try:
@@ -151,7 +190,7 @@ def patch_persona_default_status(
 @admin_agents_router.patch("/display-priorities")
 def patch_agents_display_priorities(
     display_priority_request: DisplayPriorityRequest,
-    user: User | None = Depends(current_admin_user),
+    user: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     try:
@@ -168,7 +207,7 @@ def patch_agents_display_priorities(
 
 @admin_router.get("", tags=PUBLIC_API_TAGS)
 def list_personas_admin(
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
     include_deleted: bool = False,
     get_editable: bool = Query(False, description="If true, return editable personas"),
@@ -185,7 +224,7 @@ def list_personas_admin(
 def get_agents_admin_paginated(
     page_num: int = Query(0, ge=0, description="Page number (0-indexed)."),
     page_size: int = Query(10, ge=1, le=1000, description="Items per page."),
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
     include_deleted: bool = Query(
         False, description="If true, includes deleted personas."
@@ -229,7 +268,7 @@ def get_agents_admin_paginated(
 @admin_router.patch("/{persona_id}/undelete", tags=PUBLIC_API_TAGS)
 def undelete_persona(
     persona_id: int,
-    user: User | None = Depends(current_admin_user),
+    user: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     mark_persona_as_not_deleted(
@@ -243,7 +282,7 @@ def undelete_persona(
 @admin_router.post("/upload-image")
 def upload_file(
     file: UploadFile,
-    _: User | None = Depends(current_user),
+    _: User = Depends(current_user),
 ) -> dict[str, str]:
     file_store = get_default_file_store()
     file_type = ChatFileType.IMAGE
@@ -262,12 +301,13 @@ def upload_file(
 @basic_router.post("", tags=PUBLIC_API_TAGS)
 def create_persona(
     persona_upsert_request: PersonaUpsertRequest,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> PersonaSnapshot:
     tenant_id = get_current_tenant_id()
 
     _validate_user_knowledge_enabled(persona_upsert_request, "create")
+    _validate_vector_db_knowledge(persona_upsert_request)
 
     persona_snapshot = create_update_persona(
         persona_id=None,
@@ -277,7 +317,7 @@ def create_persona(
     )
     mt_cloud_telemetry(
         tenant_id=tenant_id,
-        distinct_id=user.email if user else tenant_id,
+        distinct_id=user.email,
         event=MilestoneRecordType.CREATED_ASSISTANT,
     )
 
@@ -291,10 +331,11 @@ def create_persona(
 def update_persona(
     persona_id: int,
     persona_upsert_request: PersonaUpsertRequest,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> PersonaSnapshot:
     _validate_user_knowledge_enabled(persona_upsert_request, "update")
+    _validate_vector_db_knowledge(persona_upsert_request)
 
     persona_snapshot = create_update_persona(
         persona_id=persona_id,
@@ -312,7 +353,7 @@ class PersonaLabelPatchRequest(BaseModel):
 @basic_router.get("/labels")
 def get_labels(
     db: Session = Depends(get_session),
-    _: User | None = Depends(current_user),
+    _: User = Depends(current_user),
 ) -> list[PersonaLabelResponse]:
     return [
         PersonaLabelResponse.from_model(label)
@@ -324,7 +365,7 @@ def get_labels(
 def create_label(
     label: PersonaLabelCreate,
     db: Session = Depends(get_session),
-    _: User | None = Depends(current_user),
+    _: User = Depends(current_user),
 ) -> PersonaLabelResponse:
     """Create a new assistant label"""
     try:
@@ -341,7 +382,7 @@ def create_label(
 def patch_persona_label(
     label_id: int,
     persona_label_patch_request: PersonaLabelPatchRequest,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     update_persona_label(
@@ -354,7 +395,7 @@ def patch_persona_label(
 @admin_router.delete("/label/{label_id}")
 def delete_label(
     label_id: int,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     delete_persona_label(label_id=label_id, db_session=db_session)
@@ -387,7 +428,7 @@ def share_persona(
 @basic_router.delete("/{persona_id}", tags=PUBLIC_API_TAGS)
 def delete_persona(
     persona_id: int,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     mark_persona_as_deleted(
@@ -399,7 +440,7 @@ def delete_persona(
 
 @basic_router.get("")
 def list_personas(
-    user: User | None = Depends(current_chat_accessible_user),
+    user: User = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
     include_deleted: bool = False,
     persona_ids: list[int] = Query(None),
@@ -421,7 +462,7 @@ def list_personas(
 def get_agents_paginated(
     page_num: int = Query(0, ge=0, description="Page number (0-indexed)."),
     page_size: int = Query(10, ge=1, le=1000, description="Items per page."),
-    user: User | None = Depends(current_chat_accessible_user),
+    user: User = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
     include_deleted: bool = Query(
         False, description="If true, includes deleted personas."
@@ -468,7 +509,7 @@ def get_agents_paginated(
 @basic_router.get("/{persona_id}", tags=PUBLIC_API_TAGS)
 def get_persona(
     persona_id: int,
-    user: User | None = Depends(current_limited_user),
+    user: User = Depends(current_limited_user),
     db_session: Session = Depends(get_session),
 ) -> FullPersonaSnapshot:
     persona = get_persona_by_id(

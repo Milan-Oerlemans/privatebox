@@ -30,7 +30,7 @@ jobs:
     # fetch-depth 0 is required for helm/chart-testing-action
     steps:
       - name: Checkout code
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -41,8 +41,7 @@ jobs:
           version: v3.19.0
 
       - name: Set up chart-testing
-        # NOTE: This is Jamison's patch from https://github.com/helm/chart-testing-action/pull/194
-        uses: helm/chart-testing-action@8958a6ac472cbd8ee9a8fbb6f1acbc1b0e966e44 # zizmor: ignore[impostor-commit]
+        uses: helm/chart-testing-action@b5eebdd9998021f29756c53432f48dab66394810
         with:
           uv_version: "0.9.9"
 
@@ -92,7 +91,7 @@ jobs:
           helm repo add cloudnative-pg https://cloudnative-pg.github.io/charts
           helm repo add ot-container-kit https://ot-container-kit.github.io/helm-charts
           helm repo add minio https://charts.min.io/
-          helm repo add code-interpreter https://onyx-dot-app.github.io/code-interpreter/
+          helm repo add code-interpreter https://onyx-dot-app.github.io/python-sandbox/
           helm repo update
 
       - name: Install Redis operator
@@ -197,7 +196,6 @@ jobs:
               --set=auth.opensearch.enabled=true \
               --set=slackbot.enabled=false \
               --set=postgresql.enabled=true \
-              --set=postgresql.nameOverride=cloudnative-pg \
               --set=postgresql.cluster.storage.storageClass=standard \
               --set=redis.enabled=true \
               --set=redis.storageSpec.volumeClaimTemplate.spec.storageClassName=standard \

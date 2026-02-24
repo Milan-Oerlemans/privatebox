@@ -4,7 +4,7 @@ import * as React from "react";
 import InputTypeIn, {
   InputTypeInProps,
 } from "@/refresh-components/inputs/InputTypeIn";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import { noProp } from "@/lib/utils";
 import { SvgEye, SvgEyeClosed } from "@opal/icons";
 
@@ -283,17 +283,18 @@ export default function PasswordInputTypeIn({
       variant={disabled ? "disabled" : error ? "error" : undefined}
       showClearButton={showClearButton}
       autoComplete="off"
+      data-ph-no-capture
       rightSection={
         showToggleButton ? (
-          <IconButton
+          <Button
             icon={isRevealed ? SvgEye : SvgEyeClosed}
             disabled={disabled || effectiveNonRevealable}
             onClick={noProp(() => setIsPasswordVisible((v) => !v))}
             type="button"
-            action={isRevealed}
-            internal
-            toolTipPosition="left"
-            tooltipSize="sm"
+            variant={isRevealed ? "action" : undefined}
+            prominence="tertiary"
+            size="sm"
+            tooltipSide="left"
             tooltip={toggleLabel}
             aria-label={toggleLabel}
           />

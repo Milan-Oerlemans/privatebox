@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import { ANONYMOUS_USER_NAME, LOGOUT_DISABLED } from "@/lib/constants";
-import { Notification } from "@/app/admin/settings/interfaces";
+import { Notification } from "@/interfaces/settings";
 import useSWR, { preload } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { checkUserIsNoAuthUser, logout } from "@/lib/user";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import Text from "@/refresh-components/texts/Text";
 import LineItem from "@/refresh-components/buttons/LineItem";
@@ -23,7 +23,7 @@ import {
   SvgNotificationBubble,
 } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import useAppFocus from "@/hooks/useAppFocus";
 
 function getDisplayName(email?: string, personalName?: string): string {
@@ -58,12 +58,20 @@ function SettingsPopover({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { popup, setPopup } = usePopup();
-
   const undismissedCount =
     notifications?.filter((n) => !n.dismissed).length ?? 0;
-  const showLogout =
-    user && !checkUserIsNoAuthUser(user.id) && !LOGOUT_DISABLED;
+  const isAnonymousUser =
+    user?.is_anonymous_user || checkUserIsNoAuthUser(user?.id ?? "");
+  const showLogout = user && !isAnonymousUser && !LOGOUT_DISABLED;
+  const showLogin = isAnonymousUser;
+
+  const handleLogin = () => {
+    const currentUrl = `${pathname}${
+      searchParams?.toString() ? `?${searchParams.toString()}` : ""
+    }`;
+    const encodedRedirect = encodeURIComponent(currentUrl);
+    router.push(`/auth/login?next=${encodedRedirect}`);
+  };
 
   const handleLogout = () => {
     logout()
@@ -85,14 +93,12 @@ function SettingsPopover({
       })
 
       .catch(() => {
-        setPopup({ message: "Failed to logout", type: "error" });
+        toast.error("Failed to logout");
       });
   };
 
   return (
     <>
-      {popup}
-
       <PopoverMenu>
         {[
           <div key="user-settings" data-testid="Settings/user-settings">
@@ -123,6 +129,11 @@ function SettingsPopover({
             Help & FAQ
           </LineItem>,
           null,
+          showLogin && (
+            <LineItem key="log-in" icon={SvgUser} onClick={handleLogin}>
+              Log in
+            </LineItem>
+          ),
           showLogout && (
             <LineItem
               key="log-out"
@@ -141,9 +152,13 @@ function SettingsPopover({
 
 export interface SettingsProps {
   folded?: boolean;
+  onShowBuildIntro?: () => void;
 }
 
-export default function UserAvatarPopover({ folded }: SettingsProps) {
+export default function UserAvatarPopover({
+  folded,
+  onShowBuildIntro,
+}: SettingsProps) {
   const [popupState, setPopupState] = useState<
     "Settings" | "Notifications" | undefined
   >(undefined);
@@ -218,7 +233,7 @@ export default function UserAvatarPopover({ folded }: SettingsProps) {
           <SettingsPopover
             onUserSettingsClick={() => {
               setPopupState(undefined);
-              router.push("/chat/settings");
+              router.push("/app/settings");
             }}
             onOpenNotifications={() => setPopupState("Notifications")}
           />
@@ -227,6 +242,7 @@ export default function UserAvatarPopover({ folded }: SettingsProps) {
           <NotificationsPopover
             onClose={() => setPopupState("Settings")}
             onNavigate={() => setPopupState(undefined)}
+            onShowBuildIntro={onShowBuildIntro}
           />
         )}
       </Popover.Content>

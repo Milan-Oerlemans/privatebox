@@ -14,11 +14,8 @@ import {
 import { Metadata } from "next";
 import { buildClientUrl } from "@/lib/utilsSS";
 import { Inter } from "next/font/google";
-import {
-  EnterpriseSettings,
-  ApplicationStatus,
-} from "./admin/settings/interfaces";
-import AppProvider from "@/components/context/AppProvider";
+import { EnterpriseSettings, ApplicationStatus } from "@/interfaces/settings";
+import AppProvider from "@/providers/AppProvider";
 import { PHProvider } from "./providers";
 import { getAuthTypeMetadataSS, getCurrentUserSS } from "@/lib/userSS";
 import { Suspense } from "react";

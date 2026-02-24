@@ -31,6 +31,7 @@ import { fetchBedrockModels } from "../utils";
 import Separator from "@/refresh-components/Separator";
 import Text from "@/refresh-components/texts/Text";
 import Tabs from "@/refresh-components/Tabs";
+import { cn } from "@/lib/utils";
 
 export const BEDROCK_PROVIDER_NAME = "bedrock";
 const BEDROCK_DISPLAY_NAME = "AWS Bedrock";
@@ -135,7 +136,7 @@ function BedrockFormInternals({
     !formikProps.values.custom_config?.AWS_REGION_NAME || !isAuthComplete;
 
   return (
-    <Form className={LLM_FORM_CLASS_NAME}>
+    <Form className={cn(LLM_FORM_CLASS_NAME, "w-full")}>
       <DisplayNameField disabled={!!existingLlmProvider} />
 
       <SelectorFormField
@@ -176,7 +177,7 @@ function BedrockFormInternals({
           </Tabs.Content>
 
           <Tabs.Content value={AUTH_METHOD_ACCESS_KEY}>
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-4 w-full">
               <TextFormField
                 name={FIELD_AWS_ACCESS_KEY_ID}
                 label="AWS Access Key ID"
@@ -191,7 +192,7 @@ function BedrockFormInternals({
           </Tabs.Content>
 
           <Tabs.Content value={AUTH_METHOD_LONG_TERM_API_KEY}>
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-4 w-full">
               <PasswordInputTypeInField
                 name={FIELD_AWS_BEARER_TOKEN_BEDROCK}
                 label="AWS Bedrock Long-term API Key"
@@ -271,8 +272,6 @@ export function BedrockForm({
       {({
         onClose,
         mutate,
-        popup,
-        setPopup,
         isTesting,
         setIsTesting,
         testError,
@@ -314,62 +313,58 @@ export function BedrockForm({
         });
 
         return (
-          <>
-            {popup}
-            <Formik
-              initialValues={initialValues}
-              validationSchema={validationSchema}
-              validateOnMount={true}
-              onSubmit={async (values, { setSubmitting }) => {
-                // Filter out empty custom_config values
-                const filteredCustomConfig = Object.fromEntries(
-                  Object.entries(values.custom_config || {}).filter(
-                    ([, v]) => v !== ""
-                  )
-                );
+          <Formik
+            initialValues={initialValues}
+            validationSchema={validationSchema}
+            validateOnMount={true}
+            onSubmit={async (values, { setSubmitting }) => {
+              // Filter out empty custom_config values
+              const filteredCustomConfig = Object.fromEntries(
+                Object.entries(values.custom_config || {}).filter(
+                  ([, v]) => v !== ""
+                )
+              );
 
-                const submitValues = {
-                  ...values,
-                  custom_config:
-                    Object.keys(filteredCustomConfig).length > 0
-                      ? filteredCustomConfig
-                      : undefined,
-                };
+              const submitValues = {
+                ...values,
+                custom_config:
+                  Object.keys(filteredCustomConfig).length > 0
+                    ? filteredCustomConfig
+                    : undefined,
+              };
 
-                await submitLLMProvider({
-                  providerName: BEDROCK_PROVIDER_NAME,
-                  values: submitValues,
-                  initialValues,
-                  modelConfigurations:
-                    fetchedModels.length > 0
-                      ? fetchedModels
-                      : modelConfigurations,
-                  existingLlmProvider,
-                  shouldMarkAsDefault,
-                  setIsTesting,
-                  setTestError,
-                  setPopup,
-                  mutate,
-                  onClose,
-                  setSubmitting,
-                });
-              }}
-            >
-              {(formikProps) => (
-                <BedrockFormInternals
-                  formikProps={formikProps}
-                  existingLlmProvider={existingLlmProvider}
-                  fetchedModels={fetchedModels}
-                  setFetchedModels={setFetchedModels}
-                  modelConfigurations={modelConfigurations}
-                  isTesting={isTesting}
-                  testError={testError}
-                  mutate={mutate}
-                  onClose={onClose}
-                />
-              )}
-            </Formik>
-          </>
+              await submitLLMProvider({
+                providerName: BEDROCK_PROVIDER_NAME,
+                values: submitValues,
+                initialValues,
+                modelConfigurations:
+                  fetchedModels.length > 0
+                    ? fetchedModels
+                    : modelConfigurations,
+                existingLlmProvider,
+                shouldMarkAsDefault,
+                setIsTesting,
+                setTestError,
+                mutate,
+                onClose,
+                setSubmitting,
+              });
+            }}
+          >
+            {(formikProps) => (
+              <BedrockFormInternals
+                formikProps={formikProps}
+                existingLlmProvider={existingLlmProvider}
+                fetchedModels={fetchedModels}
+                setFetchedModels={setFetchedModels}
+                modelConfigurations={modelConfigurations}
+                isTesting={isTesting}
+                testError={testError}
+                mutate={mutate}
+                onClose={onClose}
+              />
+            )}
+          </Formik>
         );
       }}
     </ProviderFormEntrypointWrapper>

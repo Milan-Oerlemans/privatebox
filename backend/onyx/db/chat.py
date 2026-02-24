@@ -19,7 +19,6 @@ from sqlalchemy.exc import MultipleResultsFound
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
-from onyx.chat.models import DocumentRelevance
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import InferenceSection
@@ -208,7 +207,7 @@ def create_chat_session(
 
 def duplicate_chat_session_for_user_from_slack(
     db_session: Session,
-    user: User | None,
+    user: User,
     chat_session_id: UUID,
 ) -> ChatSession:
     """
@@ -235,7 +234,7 @@ def duplicate_chat_session_for_user_from_slack(
 
     return create_chat_session(
         db_session=db_session,
-        user_id=user.id if user else None,
+        user_id=user.id,
         persona_id=new_persona_id,
         # Set this to empty string so the frontend will force a rename
         description="",
@@ -273,9 +272,9 @@ def update_chat_session(
 
 
 def delete_all_chat_sessions_for_user(
-    user: User | None, db_session: Session, hard_delete: bool = HARD_DELETE_CHATS
+    user: User, db_session: Session, hard_delete: bool = HARD_DELETE_CHATS
 ) -> None:
-    user_id = user.id if user is not None else None
+    user_id = user.id
 
     chat_sessions = (
         db_session.query(ChatSession)
@@ -672,27 +671,6 @@ def set_as_latest_chat_message(
     db_session.commit()
 
 
-def update_search_docs_table_with_relevance(
-    db_session: Session,
-    reference_db_search_docs: list[DBSearchDoc],
-    relevance_summary: DocumentRelevance,
-) -> None:
-    for search_doc in reference_db_search_docs:
-        relevance_data = relevance_summary.relevance_summaries.get(
-            search_doc.document_id
-        )
-        if relevance_data is not None:
-            db_session.execute(
-                update(DBSearchDoc)
-                .where(DBSearchDoc.id == search_doc.id)
-                .values(
-                    is_relevant=relevance_data.relevant,
-                    relevance_explanation=relevance_data.content,
-                )
-            )
-    db_session.commit()
-
-
 def _sanitize_for_postgres(value: str) -> str:
     """Remove NUL (0x00) characters from strings as PostgreSQL doesn't allow them."""
     sanitized = value.replace("\x00", "")
@@ -855,6 +833,7 @@ def translate_db_message_to_chat_message_detail(
         files=chat_message.files or [],
         error=chat_message.error,
         current_feedback=current_feedback,
+        processing_duration_seconds=chat_message.processing_duration_seconds,
     )
 
     return chat_msg_detail

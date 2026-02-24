@@ -5,12 +5,15 @@ from typing import Any
 from typing import cast
 
 from pydantic import BaseModel
+from pydantic import Field
+from pydantic import field_validator
 from pydantic import model_validator
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import INDEX_SEPARATOR
 from onyx.configs.constants import RETURN_SEPARATOR
+from onyx.db.enums import HierarchyNodeType
 from onyx.db.enums import IndexModelStatus
 from onyx.utils.text_processing import make_url_compatible
 
@@ -165,6 +168,14 @@ class DocumentBase(BaseModel):
     # list of strings.
     metadata: dict[str, str | list[str]]
 
+    @field_validator("metadata", mode="before")
+    @classmethod
+    def _coerce_metadata_values(cls, v: dict[str, Any]) -> dict[str, str | list[str]]:
+        return {
+            key: [str(item) for item in val] if isinstance(val, list) else str(val)
+            for key, val in v.items()
+        }
+
     # UTC time
     doc_updated_at: datetime | None = None
     chunk_count: int | None = None
@@ -186,6 +197,14 @@ class DocumentBase(BaseModel):
     # only filled in EE for connectors w/ permission sync enabled
     external_access: ExternalAccess | None = None
     doc_metadata: dict[str, Any] | None = None
+
+    # Parent hierarchy node raw ID - the folder/space/page containing this document
+    # If None, document's hierarchy position is unknown or connector doesn't support hierarchy
+    parent_hierarchy_raw_node_id: str | None = None
+
+    # Resolved database ID of the parent hierarchy node
+    # Set during docfetching after hierarchy nodes are cached
+    parent_hierarchy_node_id: int | None = None
 
     def get_title_for_document_index(
         self,
@@ -243,6 +262,9 @@ def convert_metadata_dict_to_list_of_strings(
 
     Each string is a key-value pair separated by the INDEX_SEPARATOR. If a key
     points to a list of values, each value generates a unique pair.
+
+    NOTE: Whatever formatting strategy is used here to generate a key-value
+    string must be replicated when constructing query filters.
 
     Args:
         metadata: The metadata dict to convert where values can be either a
@@ -365,6 +387,41 @@ class SlimDocument(BaseModel):
     external_access: ExternalAccess | None = None
 
 
+class HierarchyNode(BaseModel):
+    """
+    Hierarchy node yielded by connectors.
+
+    This is the Pydantic model used by connectors, distinct from the
+    SQLAlchemy HierarchyNode model in db/models.py. The connector runner
+    layer converts this to the DB model when persisting to Postgres.
+    """
+
+    # Raw identifier from the source system
+    # e.g., "1h7uWUR2BYZjtMfEXFt43tauj-Gp36DTPtwnsNuA665I" for Google Drive
+    raw_node_id: str
+
+    # Raw ID of parent node, or None for SOURCE-level children (direct children of the source root)
+    raw_parent_id: str | None = None
+
+    # Human-readable name for display
+    display_name: str
+
+    # Link to view this node in the source system
+    link: str | None = None
+
+    # What kind of structural node this is (folder, space, page, etc.)
+    node_type: HierarchyNodeType
+
+    # If this hierarchy node represents a document (e.g., Confluence page),
+    # The db model stores that doc's document_id. This gets set during docprocessing
+    # after the document row is created. Matching is done by raw_node_id matching document.id.
+    # so, we don't allow connectors to specify this as it would be unused
+    # document_id: str | None = None
+
+    # External access information for the node
+    external_access: ExternalAccess | None = None
+
+
 class IndexAttemptMetadata(BaseModel):
     connector_id: int
     credential_id: int
@@ -404,7 +461,7 @@ class ConnectorFailure(BaseModel):
     failed_document: DocumentFailure | None = None
     failed_entity: EntityFailure | None = None
     failure_message: str
-    exception: Exception | None = None
+    exception: Exception | None = Field(default=None, exclude=True)
 
     model_config = {"arbitrary_types_allowed": True}
 
@@ -426,8 +483,9 @@ class ConnectorStopSignal(Exception):
 
 
 class OnyxMetadata(BaseModel):
-    # Note that doc_id cannot be overriden here as it may cause issues
-    # with the display functionalities in the UI. Ask @chris if clarification is needed.
+    # Careful overriding the document_id, may cause visual issues in the UI.
+    # Kept here for API based use cases mostly
+    document_id: str | None = None
     source_type: DocumentSource | None = None
     link: str | None = None
     file_display_name: str | None = None

@@ -13,6 +13,8 @@ from onyx.prompts.search_prompts import TRY_TO_FILL_TO_MAX_INSTRUCTIONS
 from onyx.tools.tool_implementations.search.constants import (
     MAX_CHUNKS_FOR_RELEVANCE,
 )
+from onyx.tracing.llm_utils import llm_generation_span
+from onyx.tracing.llm_utils import record_llm_response
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -121,13 +123,18 @@ def classify_section_relevance(
     # Default to MAIN_SECTION_ONLY
     default_classification = ContextExpansionType.MAIN_SECTION_ONLY
 
-    # Call LLM for classification
+    # Call LLM for classification with Braintrust tracing
     try:
-        response = llm.invoke(
-            prompt=UserMessage(content=prompt_text),
-            reasoning_effort=ReasoningEffort.OFF,
-        )
-        llm_response = response.choice.message.content
+        prompt_msg = UserMessage(content=prompt_text)
+        with llm_generation_span(
+            llm=llm, flow="classify_section_relevance", input_messages=[prompt_msg]
+        ) as span_generation:
+            response = llm.invoke(
+                prompt=prompt_msg,
+                reasoning_effort=ReasoningEffort.OFF,
+            )
+            record_llm_response(span_generation, response)
+            llm_response = response.choice.message.content
 
         if not llm_response:
             logger.warning(
@@ -135,16 +142,16 @@ def classify_section_relevance(
             )
             classification = default_classification
         else:
-            # Parse the response to extract the situation number (1-4)
-            numbers = re.findall(r"\b[1-4]\b", llm_response)
+            # Parse the response to extract the situation number (0-3)
+            numbers = re.findall(r"\b[0-3]\b", llm_response)
             if numbers:
                 situation = int(numbers[-1])
                 # Map situation number to ContextExpansionType
                 situation_to_type = {
-                    1: ContextExpansionType.NOT_RELEVANT,
-                    2: ContextExpansionType.MAIN_SECTION_ONLY,
-                    3: ContextExpansionType.INCLUDE_ADJACENT_SECTIONS,
-                    4: ContextExpansionType.FULL_DOCUMENT,
+                    0: ContextExpansionType.NOT_RELEVANT,
+                    1: ContextExpansionType.MAIN_SECTION_ONLY,
+                    2: ContextExpansionType.INCLUDE_ADJACENT_SECTIONS,
+                    3: ContextExpansionType.FULL_DOCUMENT,
                 }
                 classification = situation_to_type.get(
                     situation, default_classification
@@ -266,12 +273,16 @@ def select_sections_for_expansion(
         )
     )
 
-    # Call LLM for selection
+    # Call LLM for selection with Braintrust tracing
     try:
-        response = llm.invoke(
-            prompt=[prompt_text], reasoning_effort=ReasoningEffort.OFF
-        )
-        llm_response = response.choice.message.content
+        with llm_generation_span(
+            llm=llm, flow="select_sections_for_expansion", input_messages=[prompt_text]
+        ) as span_generation:
+            response = llm.invoke(
+                prompt=[prompt_text], reasoning_effort=ReasoningEffort.OFF
+            )
+            record_llm_response(span_generation, response)
+            llm_response = response.choice.message.content
 
         if not llm_response:
             logger.warning(

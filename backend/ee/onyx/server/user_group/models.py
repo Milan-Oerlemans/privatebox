@@ -53,7 +53,8 @@ class UserGroup(BaseModel):
                     id=cc_pair_relationship.cc_pair.id,
                     name=cc_pair_relationship.cc_pair.name,
                     connector=ConnectorSnapshot.from_connector_db_model(
-                        cc_pair_relationship.cc_pair.connector
+                        cc_pair_relationship.cc_pair.connector,
+                        credential_ids=[cc_pair_relationship.cc_pair.credential_id],
                     ),
                     credential=CredentialSnapshot.from_credential_db_model(
                         cc_pair_relationship.cc_pair.credential
@@ -73,6 +74,18 @@ class UserGroup(BaseModel):
             ],
             is_up_to_date=user_group_model.is_up_to_date,
             is_up_for_deletion=user_group_model.is_up_for_deletion,
+        )
+
+
+class MinimalUserGroupSnapshot(BaseModel):
+    id: int
+    name: str
+
+    @classmethod
+    def from_model(cls, user_group_model: UserGroupModel) -> "MinimalUserGroupSnapshot":
+        return cls(
+            id=user_group_model.id,
+            name=user_group_model.name,
         )
 
 

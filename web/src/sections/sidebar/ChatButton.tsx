@@ -3,8 +3,8 @@
 import React, { useState, memo, useMemo, useEffect } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import useChatSessions from "@/hooks/useChatSessions";
-import { deleteChatSession, renameChatSession } from "@/app/chat/services/lib";
-import { ChatSession } from "@/app/chat/interfaces";
+import { deleteChatSession, renameChatSession } from "@/app/app/services/lib";
+import { ChatSession } from "@/app/app/interfaces";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Button from "@/refresh-components/buttons/Button";
 import { cn, noProp } from "@/lib/utils";
@@ -14,15 +14,15 @@ import {
   Project,
   removeChatSessionFromProject,
   createProject as createProjectService,
-} from "@/app/chat/projects/projectsService";
-import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
+} from "@/app/app/projects/projectsService";
+import { useProjectsContext } from "@/providers/ProjectsContext";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
 import { UNNAMED_CHAT } from "@/lib/constants";
-import ShareChatSessionModal from "@/app/chat/components/modal/ShareChatSessionModal";
+import ShareChatSessionModal from "@/sections/modals/ShareChatSessionModal";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button as OpalButton } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import { usePopup } from "@/components/admin/connectors/Popup";
 import { DRAG_TYPES, LOCAL_STORAGE_KEYS } from "@/sections/sidebar/constants";
 import {
   shouldShowMoveModal,
@@ -75,10 +75,11 @@ export function PopoverSearchInput({
 
   return (
     <div className="flex flex-row items-center">
-      <IconButton
+      <OpalButton
         icon={SvgChevronLeft}
         onClick={handleClickBackButton}
-        internal
+        prominence="tertiary"
+        size="sm"
       />
       <InputTypeIn
         type="text"
@@ -129,7 +130,6 @@ const ChatButton = memo(
       currentProjectId,
       createProject,
     } = useProjectsContext();
-    const { popup, setPopup } = usePopup();
     const { agents } = useAgents();
     const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
     const [popoverOpen, setPopoverOpen] = useState(false);
@@ -315,26 +315,20 @@ const ChatButton = memo(
         await refreshChatSessions();
       } catch (error) {
         console.error("Failed to delete chat:", error);
-        showErrorNotification(
-          setPopup,
-          "Failed to delete chat. Please try again."
-        );
+        showErrorNotification("Failed to delete chat. Please try again.");
       }
     }
 
     async function performMove(targetProjectId: number) {
       try {
-        await handleMoveOperation(
-          {
-            chatSession,
-            targetProjectId,
-            refreshChatSessions,
-            refreshCurrentProjectDetails,
-            fetchProjects,
-            currentProjectId,
-          },
-          setPopup
-        );
+        await handleMoveOperation({
+          chatSession,
+          targetProjectId,
+          refreshChatSessions,
+          refreshCurrentProjectDetails,
+          fetchProjects,
+          currentProjectId,
+        });
         setShowMoveOptions(false);
         setSearchTerm("");
       } catch (error) {
@@ -394,10 +388,7 @@ const ChatButton = memo(
         setNavigateAfterMoveProjectId(null);
       } catch (error) {
         console.error("Failed to create project and move chat:", error);
-        showErrorNotification(
-          setPopup,
-          "Failed to create project. Please try again."
-        );
+        showErrorNotification("Failed to create project. Please try again.");
         setNavigateAfterMoveProjectId(null);
       }
     }
@@ -435,11 +426,12 @@ const ChatButton = memo(
       >
         <Popover.Anchor>
           <SidebarTab
-            href={`/chat?chatId=${chatSession.id}`}
+            href={isDragging ? undefined : `/app?chatId=${chatSession.id}`}
             onClick={handleClick}
             transient={active}
             rightChildren={rightMenu}
             focused={renaming}
+            nested={!!project}
           >
             {renaming ? (
               <ButtonRenaming
@@ -457,8 +449,6 @@ const ChatButton = memo(
 
     return (
       <>
-        {popup}
-
         {deleteConfirmationModalOpen && (
           <ConfirmationModalLayout
             title="Delete Chat"
