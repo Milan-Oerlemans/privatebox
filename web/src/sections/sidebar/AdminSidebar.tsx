@@ -185,6 +185,16 @@ const collections = (
     ...(!isCurator
       ? [
           {
+            name: "Apps",
+            items: [
+              {
+                name: "Marketplace",
+                icon: SvgOnyxOctagon,
+                link: "/admin/marketplace",
+              },
+            ],
+          },
+          {
             name: "Configuration",
             items: [
               {

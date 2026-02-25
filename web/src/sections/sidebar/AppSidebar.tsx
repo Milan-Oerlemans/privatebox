@@ -490,6 +490,22 @@ const MemoizedAppSidebarInner = memo(
       ),
       [folded]
     );
+    const appsButton = useMemo(
+      () => (
+        <div data-testid="AppSidebar/apps">
+          <SidebarTab
+            leftIcon={SvgOnyxOctagon}
+            href="/app/apps"
+            folded={folded}
+            transient={activeSidebarTab.isApps()}
+            lowlight={!folded}
+          >
+            Apps
+          </SidebarTab>
+        </div>
+      ),
+      [folded, activeSidebarTab]
+    );
     const moreAgentsButton = useMemo(
       () => (
         <div data-testid="AppSidebar/more-agents">
@@ -645,6 +661,7 @@ const MemoizedAppSidebarInner = memo(
               <>
                 {moreAgentsButton}
                 {newProjectButton}
+                {appsButton}
               </>
             ) : isLoadingDynamicContent ? null : (
               <>
@@ -667,6 +684,27 @@ const MemoizedAppSidebarInner = memo(
                       ))}
                     </SortableContext>
                     {moreAgentsButton}
+                  </SidebarSection>
+                </DndContext>
+                {/* Apps */}
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleAgentDragEnd}
+                >
+                  <SidebarSection title="Apps">
+                    <SortableContext
+                      items={visibleAgentIds}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      {visibleAgents.map((visibleAgent) => (
+                        <AgentButton
+                          key={visibleAgent.id}
+                          agent={visibleAgent}
+                        />
+                      ))}
+                    </SortableContext>
+                    {appsButton}
                   </SidebarSection>
                 </DndContext>
 

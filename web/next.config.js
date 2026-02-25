@@ -96,6 +96,67 @@ const nextConfig = {
           process.env.INTERNAL_URL || "http://localhost:8080"
         }/openapi.json`,
       },
+      // Proxy n8n to avoid CORS/Private Network Access issues
+      {
+        source: "/n8n-proxy/:path*",
+        destination: "http://privatebox.local:5678/:path*",
+      },
+      {
+        source: "/n8n-proxy",
+        destination: "http://privatebox.local:5678/",
+      },
+      // n8n Assets & API
+      {
+        source: "/assets/:path*",
+        destination: "http://privatebox.local:5678/assets/:path*",
+      },
+      {
+        source: "/rest/:path*",
+        destination: "http://privatebox.local:5678/rest/:path*",
+      },
+      // Some n8n specific paths that might be needed
+      {
+        source: "/healthz",
+        destination: "http://privatebox.local:5678/healthz",
+      },
+
+      // Appsmith Proxy
+      {
+        source: "/appsmith-proxy/:path*",
+        destination: "http://privatebox.local:4444/:path*",
+      },
+      {
+        source: "/appsmith-proxy",
+        destination: "http://privatebox.local:4444/",
+      },
+      // Appsmith Specific Static Paths (Must come before generic /static)
+      {
+        source: "/static/js/:path*",
+        destination: "http://privatebox.local:4444/static/js/:path*",
+      },
+      {
+        source: "/static/css/:path*",
+        destination: "http://privatebox.local:4444/static/css/:path*",
+      },
+      {
+        source: "/static/media/:path*",
+        destination: "http://privatebox.local:4444/static/media/:path*",
+      },
+      // Appsmith API & Service Worker
+      {
+        source: "/api/v1/:path*",
+        destination: "http://privatebox.local:4444/api/v1/:path*",
+      },
+      {
+        source: "/pageService.js",
+        destination: "http://privatebox.local:4444/pageService.js",
+      },
+
+      // Generic Static Fallback (for n8n root files like base-path.js)
+      {
+        source: "/static/:path*",
+        destination: "http://privatebox.local:5678/static/:path*",
+      },
     ];
   },
   async redirects() {

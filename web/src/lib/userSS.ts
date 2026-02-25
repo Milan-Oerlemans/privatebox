@@ -37,6 +37,7 @@ export const getAuthTypeMetadataSS = async (): Promise<AuthTypeMetadata> => {
   } else {
     authType = data.auth_type as AuthType;
   }
+  console.log(data.oauth_enabled);
 
   // for SAML / OIDC, we auto-redirect the user to the IdP when the user visits
   // Onyx in an un-authenticated state
