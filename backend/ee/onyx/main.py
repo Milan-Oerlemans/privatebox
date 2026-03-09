@@ -17,7 +17,7 @@ from ee.onyx.server.enterprise_settings.api import (
 from ee.onyx.server.evals.api import router as evals_router
 from ee.onyx.server.license.api import router as license_router
 from ee.onyx.server.manage.standard_answer import router as standard_answer_router
-from ee.onyx.server.middleware.license_enforcement import (
+from ee.onyx.server.middleware.license_enforcement import ( 
     add_license_enforcement_middleware,
 )
 from ee.onyx.server.middleware.tenant_tracking import (

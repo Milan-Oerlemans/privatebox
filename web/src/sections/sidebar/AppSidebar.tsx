@@ -565,10 +565,10 @@ const MemoizedAppSidebarInner = memo(
       () => (
         <div data-testid="AppSidebar/apps">
           <SidebarTab
-            leftIcon={SvgOnyxOctagon}
+            icon={SvgOnyxOctagon}
             href="/app/apps"
             folded={folded}
-            transient={activeSidebarTab.isApps()}
+            selected={activeSidebarTab.isApps()}
             lowlight={!folded}
           >
             Apps
