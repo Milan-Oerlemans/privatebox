@@ -59,3 +59,5 @@ node_modules
 
 # plans
 plans/
+deployment/letsencrypt-backup
+deployment/data/certbot/
