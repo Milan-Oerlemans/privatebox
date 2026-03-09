@@ -5,7 +5,7 @@ import * as SettingsLayouts from "@/layouts/settings-layouts";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Text from "@/refresh-components/texts/Text";
 import { Card } from "@/refresh-components/cards";
-import { LineItemLayout } from "@/layouts/general-layouts";
+import { Content } from "@opal/layouts";
 import Button from "@/refresh-components/buttons/Button";
 import {
   SvgOnyxOctagon,
@@ -203,7 +203,7 @@ function MarketplaceAppCard({ app }: { app: MarketplaceApp }) {
       <div className="bg-background-tint-01 p-2 flex flex-row items-center justify-between w-full border-t border-border-01">
         {/* Category */}
         <div className="px-1">
-          <LineItemLayout icon={SvgTag} title={app.category} variant="mini" />
+          <Content icon={SvgTag} title={app.category} sizePreset="secondary" variant="body" prominence="muted" />
         </div>
 
         {/* Install Button */}
