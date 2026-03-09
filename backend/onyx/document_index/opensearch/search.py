@@ -28,6 +28,7 @@ from onyx.document_index.opensearch.schema import HIDDEN_FIELD_NAME
 from onyx.document_index.opensearch.schema import LAST_UPDATED_FIELD_NAME
 from onyx.document_index.opensearch.schema import MAX_CHUNK_SIZE_FIELD_NAME
 from onyx.document_index.opensearch.schema import METADATA_LIST_FIELD_NAME
+from onyx.document_index.opensearch.schema import PERSONAS_FIELD_NAME
 from onyx.document_index.opensearch.schema import PUBLIC_FIELD_NAME
 from onyx.document_index.opensearch.schema import set_or_convert_timezone_to_utc
 from onyx.document_index.opensearch.schema import SOURCE_TYPE_FIELD_NAME
@@ -144,6 +145,7 @@ class DocumentQuery:
             document_sets=index_filters.document_set or [],
             user_file_ids=index_filters.user_file_ids or [],
             project_id=index_filters.project_id,
+            persona_id=index_filters.persona_id,
             time_cutoff=index_filters.time_cutoff,
             min_chunk_index=min_chunk_index,
             max_chunk_index=max_chunk_index,
@@ -202,6 +204,7 @@ class DocumentQuery:
             document_sets=[],
             user_file_ids=[],
             project_id=None,
+            persona_id=None,
             time_cutoff=None,
             min_chunk_index=None,
             max_chunk_index=None,
@@ -267,6 +270,7 @@ class DocumentQuery:
             document_sets=index_filters.document_set or [],
             user_file_ids=index_filters.user_file_ids or [],
             project_id=index_filters.project_id,
+            persona_id=index_filters.persona_id,
             time_cutoff=index_filters.time_cutoff,
             min_chunk_index=None,
             max_chunk_index=None,
@@ -334,6 +338,7 @@ class DocumentQuery:
             document_sets=index_filters.document_set or [],
             user_file_ids=index_filters.user_file_ids or [],
             project_id=index_filters.project_id,
+            persona_id=index_filters.persona_id,
             time_cutoff=index_filters.time_cutoff,
             min_chunk_index=None,
             max_chunk_index=None,
@@ -496,6 +501,7 @@ class DocumentQuery:
         document_sets: list[str],
         user_file_ids: list[UUID],
         project_id: int | None,
+        persona_id: int | None,
         time_cutoff: datetime | None,
         min_chunk_index: int | None,
         max_chunk_index: int | None,
@@ -530,6 +536,8 @@ class DocumentQuery:
                 retrieved.
             project_id: If not None, only documents with this project ID in user
                 projects will be retrieved.
+            persona_id: If not None, only documents whose personas array
+                contains this persona ID will be retrieved.
             time_cutoff: Time cutoff for the documents to retrieve. If not None,
                 Documents which were last updated before this date will not be
                 returned. For documents which do not have a value for their last
@@ -627,6 +635,9 @@ class DocumentQuery:
             )
             return user_project_filter
 
+        def _get_persona_filter(persona_id: int) -> dict[str, Any]:
+            return {"term": {PERSONAS_FIELD_NAME: {"value": persona_id}}}
+
         def _get_time_cutoff_filter(time_cutoff: datetime) -> dict[str, Any]:
             # Convert to UTC if not already so the cutoff is comparable to the
             # document data.
@@ -687,41 +698,6 @@ class DocumentQuery:
             """
             return {"terms": {ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME: node_ids}}
 
-        def _get_assistant_knowledge_filter(
-            attached_doc_ids: list[str] | None,
-            node_ids: list[int] | None,
-            file_ids: list[UUID] | None,
-            document_sets: list[str] | None,
-        ) -> dict[str, Any]:
-            """Combined filter for assistant knowledge.
-
-            When an assistant has attached knowledge, search should be scoped to:
-            - Documents explicitly attached (by document ID), OR
-            - Documents under attached hierarchy nodes (by ancestor node IDs), OR
-            - User-uploaded files attached to the assistant, OR
-            - Documents in the assistant's document sets (if any)
-            """
-            knowledge_filter: dict[str, Any] = {
-                "bool": {"should": [], "minimum_should_match": 1}
-            }
-            if attached_doc_ids:
-                knowledge_filter["bool"]["should"].append(
-                    _get_attached_document_id_filter(attached_doc_ids)
-                )
-            if node_ids:
-                knowledge_filter["bool"]["should"].append(
-                    _get_hierarchy_node_filter(node_ids)
-                )
-            if file_ids:
-                knowledge_filter["bool"]["should"].append(
-                    _get_user_file_id_filter(file_ids)
-                )
-            if document_sets:
-                knowledge_filter["bool"]["should"].append(
-                    _get_document_set_filter(document_sets)
-                )
-            return knowledge_filter
-
         filter_clauses: list[dict[str, Any]] = []
 
         if not include_hidden:
@@ -747,38 +723,53 @@ class DocumentQuery:
             # document's metadata list.
             filter_clauses.append(_get_tag_filter(tags))
 
-        # Check if this is an assistant knowledge search (has any assistant-scoped knowledge)
-        has_assistant_knowledge = (
+        # Knowledge scope: explicit knowledge attachments restrict what
+        # an assistant can see.  When none are set the assistant
+        # searches everything.
+        #
+        # project_id / persona_id are additive: they make overflowing
+        # user files findable but must NOT trigger the restriction on
+        # their own (an agent with no explicit knowledge should search
+        # everything).
+        has_knowledge_scope = (
             attached_document_ids
             or hierarchy_node_ids
             or user_file_ids
             or document_sets
         )
 
-        if has_assistant_knowledge:
-            # If assistant has attached knowledge, scope search to that knowledge.
-            # Document sets are included in the OR filter so directly attached
-            # docs are always findable even if not in the document sets.
-            filter_clauses.append(
-                _get_assistant_knowledge_filter(
-                    attached_document_ids,
-                    hierarchy_node_ids,
-                    user_file_ids,
-                    document_sets,
+        if has_knowledge_scope:
+            knowledge_filter: dict[str, Any] = {
+                "bool": {"should": [], "minimum_should_match": 1}
+            }
+            if attached_document_ids:
+                knowledge_filter["bool"]["should"].append(
+                    _get_attached_document_id_filter(attached_document_ids)
                 )
-            )
-        elif user_file_ids:
-            # Fallback for non-assistant user file searches (e.g., project searches)
-            # If at least one user file ID is provided, the caller will only
-            # retrieve documents where the document ID is in this input list of
-            # file IDs.
-            filter_clauses.append(_get_user_file_id_filter(user_file_ids))
-
-        if project_id is not None:
-            # If a project ID is provided, the caller will only retrieve
-            # documents where the project ID provided here is present in the
-            # document's user projects list.
-            filter_clauses.append(_get_user_project_filter(project_id))
+            if hierarchy_node_ids:
+                knowledge_filter["bool"]["should"].append(
+                    _get_hierarchy_node_filter(hierarchy_node_ids)
+                )
+            if user_file_ids:
+                knowledge_filter["bool"]["should"].append(
+                    _get_user_file_id_filter(user_file_ids)
+                )
+            if document_sets:
+                knowledge_filter["bool"]["should"].append(
+                    _get_document_set_filter(document_sets)
+                )
+            # Additive: widen scope to also cover overflowing user
+            # files, but only when an explicit restriction is already
+            # in effect.
+            if project_id is not None:
+                knowledge_filter["bool"]["should"].append(
+                    _get_user_project_filter(project_id)
+                )
+            if persona_id is not None:
+                knowledge_filter["bool"]["should"].append(
+                    _get_persona_filter(persona_id)
+                )
+            filter_clauses.append(knowledge_filter)
 
         if time_cutoff is not None:
             # If a time cutoff is provided, the caller will only retrieve

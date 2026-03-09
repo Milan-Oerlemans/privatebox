@@ -23,7 +23,6 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
 from office365.graph_client import GraphClient  # type: ignore[import-untyped]
-from office365.intune.organizations.organization import Organization  # type: ignore[import-untyped]
 from office365.onedrive.driveitems.driveItem import DriveItem  # type: ignore[import-untyped]
 from office365.onedrive.sites.site import Site  # type: ignore[import-untyped]
 from office365.onedrive.sites.sites_with_root import SitesWithRoot  # type: ignore[import-untyped]
@@ -47,6 +46,7 @@ from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import IndexingHeartbeatInterface
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
+from onyx.connectors.microsoft_graph_env import resolve_microsoft_environment
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
@@ -146,7 +146,9 @@ class DriveItemData(BaseModel):
             self.id,
             ResourcePath("items", ResourcePath(self.drive_id, ResourcePath("drives"))),
         )
-        return DriveItem(graph_client, path)
+        item = DriveItem(graph_client, path)
+        item.set_property("id", self.id)
+        return item
 
 
 # The office365 library's ClientContext caches the access token from its
@@ -770,6 +772,7 @@ def _convert_driveitem_to_slim_document(
     drive_name: str,
     ctx: ClientContext,
     graph_client: GraphClient,
+    parent_hierarchy_raw_node_id: str | None = None,
 ) -> SlimDocument:
     if driveitem.id is None:
         raise ValueError("DriveItem ID is required")
@@ -785,11 +788,15 @@ def _convert_driveitem_to_slim_document(
     return SlimDocument(
         id=driveitem.id,
         external_access=external_access,
+        parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
     )
 
 
 def _convert_sitepage_to_slim_document(
-    site_page: dict[str, Any], ctx: ClientContext | None, graph_client: GraphClient
+    site_page: dict[str, Any],
+    ctx: ClientContext | None,
+    graph_client: GraphClient,
+    parent_hierarchy_raw_node_id: str | None = None,
 ) -> SlimDocument:
     """Convert a SharePoint site page to a SlimDocument object."""
     if site_page.get("id") is None:
@@ -806,6 +813,7 @@ def _convert_sitepage_to_slim_document(
     return SlimDocument(
         id=id,
         external_access=external_access,
+        parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
     )
 
 
@@ -837,10 +845,20 @@ class SharepointConnector(
         self._cached_rest_ctx: ClientContext | None = None
         self._cached_rest_ctx_url: str | None = None
         self._cached_rest_ctx_created_at: float = 0.0
-        self.authority_host = authority_host.rstrip("/")
-        self.graph_api_host = graph_api_host.rstrip("/")
+
+        resolved_env = resolve_microsoft_environment(graph_api_host, authority_host)
+        self._azure_environment = resolved_env.environment
+        self.authority_host = resolved_env.authority_host
+        self.graph_api_host = resolved_env.graph_host
         self.graph_api_base = f"{self.graph_api_host}/v1.0"
-        self.sharepoint_domain_suffix = sharepoint_domain_suffix
+        self.sharepoint_domain_suffix = resolved_env.sharepoint_domain_suffix
+        if sharepoint_domain_suffix != resolved_env.sharepoint_domain_suffix:
+            logger.warning(
+                f"Configured sharepoint_domain_suffix '{sharepoint_domain_suffix}' "
+                f"differs from the expected suffix '{resolved_env.sharepoint_domain_suffix}' "
+                f"for the {resolved_env.environment} environment. "
+                f"Using '{resolved_env.sharepoint_domain_suffix}'."
+            )
 
     def validate_connector_settings(self) -> None:
         # Validate that at least one content type is enabled
@@ -858,6 +876,56 @@ class SharepointConnector(
                 raise ConnectorValidationError(
                     "Site URLs must be full Sharepoint URLs (e.g. https://your-tenant.sharepoint.com/sites/your-site or https://your-tenant.sharepoint.com/teams/your-team)"
                 )
+
+    def _extract_tenant_domain_from_sites(self) -> str | None:
+        """Extract the tenant domain from configured site URLs.
+
+        Site URLs look like https://{tenant}.sharepoint.com/sites/... so the
+        tenant domain is the first label of the hostname.
+        """
+        for site_url in self.sites:
+            try:
+                hostname = urlsplit(site_url.strip()).hostname
+            except ValueError:
+                continue
+            if not hostname:
+                continue
+            tenant = hostname.split(".")[0]
+            if tenant:
+                return tenant
+        logger.warning(f"No tenant domain found from {len(self.sites)} sites")
+        return None
+
+    def _resolve_tenant_domain_from_root_site(self) -> str:
+        """Resolve tenant domain via GET /v1.0/sites/root which only requires
+        Sites.Read.All (a permission the connector already needs)."""
+        root_site = self.graph_client.sites.root.get().execute_query()
+        hostname = root_site.site_collection.hostname
+        if not hostname:
+            raise ConnectorValidationError(
+                "Could not determine tenant domain from root site"
+            )
+        tenant_domain = hostname.split(".")[0]
+        logger.info(
+            "Resolved tenant domain '%s' from root site hostname '%s'",
+            tenant_domain,
+            hostname,
+        )
+        return tenant_domain
+
+    def _resolve_tenant_domain(self) -> str:
+        """Determine the tenant domain, preferring site URLs over a Graph API
+        call to avoid needing extra permissions."""
+        from_sites = self._extract_tenant_domain_from_sites()
+        if from_sites:
+            logger.info(
+                "Resolved tenant domain '%s' from site URLs",
+                from_sites,
+            )
+            return from_sites
+
+        logger.info("No site URLs available; resolving tenant domain from root site")
+        return self._resolve_tenant_domain_from_root_site()
 
     @property
     def graph_client(self) -> GraphClient:
@@ -1532,12 +1600,22 @@ class SharepointConnector(
                             )
                         )
 
+                    parent_hierarchy_url: str | None = None
+                    if drive_web_url:
+                        parent_hierarchy_url = self._get_parent_hierarchy_url(
+                            site_url, drive_web_url, drive_name, driveitem
+                        )
+
                     try:
                         logger.debug(f"Processing: {driveitem.web_url}")
                         ctx = self._create_rest_client_context(site_descriptor.url)
                         doc_batch.append(
                             _convert_driveitem_to_slim_document(
-                                driveitem, drive_name, ctx, self.graph_client
+                                driveitem,
+                                drive_name,
+                                ctx,
+                                self.graph_client,
+                                parent_hierarchy_raw_node_id=parent_hierarchy_url,
                             )
                         )
                     except Exception as e:
@@ -1557,7 +1635,10 @@ class SharepointConnector(
                     ctx = self._create_rest_client_context(site_descriptor.url)
                     doc_batch.append(
                         _convert_sitepage_to_slim_document(
-                            site_page, ctx, self.graph_client
+                            site_page,
+                            ctx,
+                            self.graph_client,
+                            parent_hierarchy_raw_node_id=site_descriptor.url,
                         )
                     )
                     if len(doc_batch) >= SLIM_BATCH_SIZE:
@@ -1575,6 +1656,11 @@ class SharepointConnector(
         sp_directory_id = credentials.get("sp_directory_id")
         sp_private_key = credentials.get("sp_private_key")
         sp_certificate_password = credentials.get("sp_certificate_password")
+
+        if not sp_client_id:
+            raise ConnectorValidationError("Client ID is required")
+        if not sp_directory_id:
+            raise ConnectorValidationError("Directory (tenant) ID is required")
 
         authority_url = f"{self.authority_host}/{sp_directory_id}"
 
@@ -1624,23 +1710,11 @@ class SharepointConnector(
                 raise ConnectorValidationError("Failed to acquire token for graph")
             return token
 
-        self._graph_client = GraphClient(_acquire_token_for_graph)
+        self._graph_client = GraphClient(
+            _acquire_token_for_graph, environment=self._azure_environment
+        )
         if auth_method == SharepointAuthMethod.CERTIFICATE.value:
-            org = self.graph_client.organization.get().execute_query()
-            if not org or len(org) == 0:
-                raise ConnectorValidationError("No organization found")
-
-            tenant_info: Organization = org[
-                0
-            ]  # Access first item directly from collection
-            if not tenant_info.verified_domains:
-                raise ConnectorValidationError("No verified domains found for tenant")
-
-            sp_tenant_domain = tenant_info.verified_domains[0].name
-            if not sp_tenant_domain:
-                raise ConnectorValidationError("No verified domains found for tenant")
-            # remove the .onmicrosoft.com part
-            self.sp_tenant_domain = sp_tenant_domain.split(".")[0]
+            self.sp_tenant_domain = self._resolve_tenant_domain()
         return None
 
     def _get_drive_names_for_site(self, site_url: str) -> list[str]:

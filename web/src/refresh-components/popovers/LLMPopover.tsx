@@ -3,12 +3,12 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
-import { structureValue } from "@/lib/llm/utils";
+import { structureValue } from "@/lib/llmConfig/utils";
 import {
   getProviderIcon,
   AGGREGATOR_PROVIDERS,
 } from "@/app/admin/configuration/llm/utils";
-import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import { LLMProviderDescriptor } from "@/interfaces/llm";
 import { Slider } from "@/components/ui/slider";
 import { useUser } from "@/providers/UserProvider";
 import LineItem from "@/refresh-components/buttons/LineItem";
@@ -29,6 +29,7 @@ import {
 } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { OpenButton } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { LLMOption, LLMOptionGroup } from "./interfaces";
 
 export interface LLMPopoverProps {
@@ -355,20 +356,20 @@ export default function LLMPopover({
     <Popover open={open} onOpenChange={setOpen}>
       <div data-testid="llm-popover-trigger">
         <Popover.Trigger asChild disabled={disabled}>
-          <OpenButton
-            icon={
-              folded
-                ? SvgRefreshCw
-                : getProviderIcon(
-                    llmManager.currentLlm.provider,
-                    llmManager.currentLlm.modelName
-                  )
-            }
-            foldable={folded}
-            disabled={disabled}
-          >
-            {currentLlmDisplayName}
-          </OpenButton>
+          <Disabled disabled={disabled}>
+            <OpenButton
+              icon={
+                folded
+                  ? SvgRefreshCw
+                  : getProviderIcon(
+                      llmManager.currentLlm.provider,
+                      llmManager.currentLlm.modelName
+                    )
+              }
+            >
+              {currentLlmDisplayName}
+            </OpenButton>
+          </Disabled>
         </Popover.Trigger>
       </div>
 

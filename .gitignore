@@ -60,15 +60,7 @@ deployment/docker_compose/env.txt
 
 # plans
 plans/
-deployment/data/certbot/conf/
-deployment/letsencrypt-backup/
-deployment/letsencrypt-backup/
-deployment/data/certbot/conf/renewal/chat.privatebox.co.za.conf
-
-deployment/data/certbot/conf/renewal/dev.privatebox.co.za.conf
-deployment/data/certbot/conf/renewal/chat.privatebox.co.za.conf
-deployment/data/certbot/conf/renewal/chat.privatebox.co.za.conf
-deployment/data/certbot/conf/renewal/dev.privatebox.co.za.conf
-deployment/data/certbot/conf/renewal/dev.privatebox.co.za.conf
-llm/tests/venv/
+deployment/letsencrypt-backup
+deployment/data/certbot/
+lm/tests/venv/
 llm/bench/venv/
