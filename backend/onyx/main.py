@@ -62,6 +62,7 @@ from onyx.db.engine.sql_engine import SqlEngine
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.api_key.api import router as api_key_router
+from onyx.server.ai_server_proxy.api import router as ai_server_proxy_router
 from onyx.server.auth_check import check_router_auth
 from onyx.server.documents.cc_pair import router as cc_pair_router
 from onyx.server.documents.connector import router as connector_router
@@ -504,6 +505,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
         application, token_rate_limit_settings_router
     )
     include_router_with_global_prefix_prepended(application, api_key_router)
+    include_router_with_global_prefix_prepended(application, ai_server_proxy_router)
     include_router_with_global_prefix_prepended(application, standard_oauth_router)
     include_router_with_global_prefix_prepended(application, federated_router)
     include_router_with_global_prefix_prepended(application, mcp_router)

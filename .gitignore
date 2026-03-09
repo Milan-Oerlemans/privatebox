@@ -64,3 +64,4 @@ deployment/letsencrypt-backup
 deployment/data/certbot/
 lm/tests/venv/
 llm/bench/venv/
+deployment/data/certbot
